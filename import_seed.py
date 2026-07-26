@@ -1,4 +1,6 @@
 """Idempotent seed import — reads seed/*.csv and upserts. Safe to re-run."""
+from __future__ import annotations  # Python 3.9 compat for `X | None` hints
+
 import csv
 
 import config

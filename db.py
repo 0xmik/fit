@@ -1,4 +1,6 @@
 """SQLite schema + queries. Plain SQL, no ORM."""
+from __future__ import annotations  # Python 3.9 compat for `X | None` hints
+
 import sqlite3
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo

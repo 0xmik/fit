@@ -1,4 +1,6 @@
 """caltrack Telegram bot — log food (text/photo), weight, waist, workout, progress photos."""
+from __future__ import annotations  # Python 3.9 compat for `X | None` hints
+
 import io
 import logging
 from datetime import datetime

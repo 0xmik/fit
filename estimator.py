@@ -2,6 +2,8 @@
 
 Estimates are approximate by design — good enough for trend and awareness.
 """
+from __future__ import annotations  # Python 3.9 compat for `X | None` hints
+
 import base64
 import json
 
