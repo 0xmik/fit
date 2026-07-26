@@ -17,6 +17,8 @@ import estimator
 
 log = logging.getLogger("caltrack.bot")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+# httpx logs every Telegram API request URL — which contains the bot token
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 PROGRESS_CAPTIONS = {"me", "progress", "body"}
 
