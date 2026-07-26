@@ -1,0 +1,12 @@
+date,meal,name,grams,raw_or_cooked,kcal,protein_g,logged_at,note
+2026-07-25,dinner,"tuna in water with red onion",180,drained,230,50,2026-07-25T20:11:00+02:00,"~2 cans, in water, drained; estimate approximate"
+2026-07-25,dinner,"cherry tomatoes",180,raw,30,1.5,2026-07-25T20:11:00+02:00,"~13 pieces"
+2026-07-25,dinner,"guacamole",40,,80,1,2026-07-25T20:11:00+02:00,"dollop on plate"
+2026-07-26,breakfast,"scrambled eggs",190,cooked,260,24,2026-07-26T11:21:00+02:00,"~3-4 eggs net, small share given away; minimal oil"
+2026-07-26,breakfast,"skyr nature",100,,63,11,2026-07-26T11:21:00+02:00,""
+2026-07-26,breakfast,"blueberries",60,raw,35,0.5,2026-07-26T11:21:00+02:00,""
+2026-07-26,breakfast,"black coffee",1,,2,0,2026-07-26T11:21:00+02:00,"1 cup"
+2026-07-26,lunch,"grilled chicken breast",220,cooked,380,66,2026-07-26T17:13:00+02:00,"~2 breasts, grilled with marinade; forest meal"
+2026-07-26,lunch,"eggs",100,cooked,150,13,2026-07-26T17:13:00+02:00,"2 eggs"
+2026-07-26,lunch,"mixed fruit and veg",0,,80,2,2026-07-26T17:13:00+02:00,"blueberries, peppers, cucumber, tomato; no mango"
+2026-07-26,snack,"apple juice (Bio Gala Suessmoscht)",300,,150,0.6,2026-07-26T17:40:00+02:00,"~300ml assumed; 100% apple juice, ~34g sugar; liquid calories"

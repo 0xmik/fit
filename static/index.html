@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>caltrack</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🥩</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0A0E14; --card:#0F1520; --border:#1E2A38;
+  --cyan:#35C0E8; --amber:#E0A23C; --coral:#E4623E; --teal:#2C7A8C;
+  --green:#43C275;
+  --text:#E6EDF3; --muted:#6B7A8D;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  font-family:'JetBrains Mono',monospace; color:var(--text);
+  background:var(--bg);
+  background-image:radial-gradient(ellipse 80% 50% at 50% -10%, #131A26 0%, var(--bg) 70%);
+  min-height:100vh; padding:24px 16px 60px;
+}
+.wrap{max-width:980px;margin:0 auto}
+header{display:flex;justify-content:space-between;align-items:baseline;
+  text-transform:uppercase;letter-spacing:.14em;font-size:12px;margin-bottom:22px}
+header .who{color:var(--text);font-weight:500}
+header .sync{color:var(--muted)}
+.card{
+  background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:18px 20px; margin-bottom:18px;
+  box-shadow:inset 0 0 40px rgba(53,192,232,.02);
+}
+.card-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px}
+.sec{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+.sec::before{content:"• ";color:var(--teal)}
+.meta{font-size:11px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:760px){.grid2{grid-template-columns:1fr}}
+.chartbox{position:relative;height:190px}
+
+/* pills */
+.pill{display:inline-block;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+  border:1px solid;border-radius:4px;padding:2px 8px;vertical-align:middle}
+.pill.ok{color:var(--cyan);border-color:var(--cyan)}
+.pill.good{color:var(--green);border-color:var(--green)}
+.pill.watch{color:var(--amber);border-color:var(--amber)}
+.pill.flag{color:var(--coral);border-color:var(--coral)}
+.pill.neutral{color:var(--muted);border-color:var(--border)}
+
+/* day card */
+.day-nav{display:flex;gap:10px;align-items:center}
+.day-nav button{background:none;border:1px solid var(--border);color:var(--muted);
+  font-family:inherit;font-size:12px;padding:2px 10px;border-radius:4px;cursor:pointer}
+.day-nav button:hover{color:var(--cyan);border-color:var(--cyan)}
+.day-head{display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;margin-bottom:6px}
+.day-date{font-size:13px;letter-spacing:.14em;text-transform:uppercase}
+.bignum{font-size:44px;font-weight:300;line-height:1.1;margin:8px 0 2px}
+.bignum .unit{font-size:13px;color:var(--muted);font-weight:400;margin-left:6px}
+.bignum.under{color:var(--green)} .bignum.over{color:var(--coral)}
+.subline{font-size:12px;color:var(--muted);margin-bottom:14px}
+.subline .ok{color:var(--green)}
+
+/* double progress bar */
+.track{position:relative;height:14px;background:#0A101A;border:1px solid var(--border);
+  border-radius:7px;margin:10px 0 4px;overflow:visible}
+.track .fill{position:absolute;top:0;left:0;height:100%;border-radius:7px 0 0 7px;
+  background:linear-gradient(90deg,#1E7FA0,var(--cyan))}
+.track .fill.over{background:linear-gradient(90deg,#A0472C,var(--coral))}
+.track .goalmark{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--amber)}
+.track-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);
+  letter-spacing:.1em;text-transform:uppercase;margin-bottom:14px}
+
+/* meal groups */
+.meal-title{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);
+  margin:16px 0 6px}
+.item{display:grid;grid-template-columns:1fr 90px 110px;gap:10px;align-items:center;
+  padding:6px 0;border-bottom:1px solid #131C29;font-size:12px}
+.item:last-child{border-bottom:none}
+.item .nm{color:var(--text)}
+.item .detail{color:var(--muted);font-size:10px;margin-top:2px}
+.item .pbar{height:3px;background:#131C29;border-radius:2px;overflow:hidden}
+.item .pbar i{display:block;height:100%;background:var(--teal)}
+.item .macros{text-align:right;color:var(--muted)}
+.item .macros b{color:var(--text);font-weight:500}
+.thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.thumbs img{width:72px;height:72px;object-fit:cover;border-radius:6px;
+  border:1px solid var(--border);cursor:pointer}
+
+/* progress */
+.timeline{display:flex;gap:10px;overflow-x:auto;padding-bottom:6px}
+.tl-item{text-align:center;flex:0 0 auto}
+.tl-item img{width:92px;height:122px;object-fit:cover;border-radius:6px;
+  border:1px solid var(--border);cursor:pointer}
+.tl-item .d{font-size:10px;color:var(--muted);margin-top:4px;letter-spacing:.1em}
+.compare{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}
+.compare figure img{width:100%;border-radius:8px;border:1px solid var(--border)}
+.compare figcaption{font-size:10px;color:var(--muted);letter-spacing:.14em;
+  text-transform:uppercase;margin-top:6px;text-align:center}
+.delta{font-size:12px;color:var(--muted);text-align:center;margin-top:10px}
+.delta b{color:var(--cyan);font-weight:500}
+.empty{color:var(--muted);font-size:12px;padding:12px 0}
+
+/* lightbox */
+#lightbox{position:fixed;inset:0;background:rgba(4,7,11,.92);display:none;
+  align-items:center;justify-content:center;z-index:50;cursor:zoom-out}
+#lightbox img{max-width:92vw;max-height:92vh;border-radius:8px}
+footer{text-align:center;font-size:10px;color:var(--muted);letter-spacing:.2em;
+  text-transform:uppercase;margin-top:30px}
+.disclaimer{font-size:10px;color:var(--muted);margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="who">Michael · caltrack 🥩</div>
+    <div class="sync">data sync <span id="sync-date"></span></div>
+  </header>
+
+  <!-- A · weekly overview -->
+  <div class="grid2">
+    <div class="card">
+      <div class="card-head"><div class="sec">daily intake</div><div class="meta">7 d</div></div>
+      <div class="chartbox"><canvas id="calChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><div class="sec">protein</div><div class="meta">7 d</div></div>
+      <div class="chartbox"><canvas id="protChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- B · day card -->
+  <div class="card" id="dayCard">
+    <div class="card-head">
+      <div class="sec">day log</div>
+      <div class="day-nav">
+        <button id="prevDay">‹</button>
+        <span class="meta" id="dayNavDate"></span>
+        <button id="nextDay">›</button>
+      </div>
+    </div>
+    <div class="day-head" id="dayHead"></div>
+    <div class="bignum" id="dayKcal"></div>
+    <div class="track" id="dayTrack"></div>
+    <div class="track-labels"><span>0</span><span id="trackGoal"></span><span id="trackMaint"></span></div>
+    <div class="subline" id="daySub"></div>
+    <div id="mealGroups"></div>
+    <div class="thumbs" id="foodThumbs"></div>
+  </div>
+
+  <!-- C · progress -->
+  <div class="card">
+    <div class="card-head"><div class="sec">progress · cut</div><div class="meta" id="progMeta"></div></div>
+    <div class="chartbox" style="height:230px"><canvas id="weightChart"></canvas></div>
+    <div class="meal-title" style="margin-top:22px">photo timeline</div>
+    <div class="timeline" id="photoTimeline"></div>
+    <div id="compareWrap"></div>
+    <p class="disclaimer">macro numbers are estimates — trend & awareness, not lab precision · photos are for visual comparison only</p>
+  </div>
+
+  <footer>private · caltrack</footer>
+</div>
+<div id="lightbox" onclick="this.style.display='none'"><img id="lightboxImg" alt=""></div>
+
+<script>
+const CSS = getComputedStyle(document.documentElement);
+const C = n => CSS.getPropertyValue(n).trim();
+const MONO = "'JetBrains Mono', monospace";
+Chart.defaults.font.family = MONO;
+Chart.defaults.font.size = 10;
+Chart.defaults.color = C('--muted');
+
+let CFG = null, WEEK = [], selectedDay = null;
+let calChart, protChart, weightChart;
+
+const fmt = n => Math.round(n).toLocaleString('en-US').replace(/,/g, ' ');
+const dLabel = d => new Date(d + 'T12:00:00').toLocaleDateString('en-GB',
+  {day:'2-digit', month:'short'}).toUpperCase().replace('.','');
+
+async function j(url){ const r = await fetch(url); return r.json(); }
+
+/* --- band + target line plugin (maintenance band, goal line) --- */
+function bandPlugin(bandVal, lineVal, lineColor){
+  return {
+    id:'band',
+    beforeDatasetsDraw(chart){
+      const {ctx, chartArea:a, scales:{y}} = chart;
+      if(bandVal != null){
+        const yb = y.getPixelForValue(bandVal);
+        ctx.save();
+        ctx.fillStyle = 'rgba(53,192,232,0.05)';
+        ctx.fillRect(a.left, Math.max(yb, a.top), a.width, a.bottom - Math.max(yb, a.top));
+        ctx.strokeStyle = 'rgba(53,192,232,0.18)';
+        ctx.setLineDash([2,4]);
+        ctx.beginPath(); ctx.moveTo(a.left, yb); ctx.lineTo(a.right, yb); ctx.stroke();
+        ctx.restore();
+      }
+      if(lineVal != null){
+        const yl = y.getPixelForValue(lineVal);
+        ctx.save();
+        ctx.strokeStyle = lineColor; ctx.lineWidth = 1; ctx.setLineDash([6,4]);
+        ctx.beginPath(); ctx.moveTo(a.left, yl); ctx.lineTo(a.right, yl); ctx.stroke();
+        ctx.restore();
+      }
+    }
+  };
+}
+
+const AXIS = {grid:{display:false}, border:{color:C('--border')}};
+
+function buildWeekCharts(){
+  const labels = WEEK.map(d => dLabel(d.date));
+
+  calChart?.destroy();
+  calChart = new Chart(document.getElementById('calChart'), {
+    type:'bar',
+    data:{labels, datasets:[{
+      data: WEEK.map(d => d.kcal_eaten),
+      backgroundColor: WEEK.map(d => d.kcal_eaten > CFG.goal_kcal ? C('--coral') : C('--green')),
+      borderRadius:3, maxBarThickness:26,
+    }]},
+    options:{
+      maintainAspectRatio:false,
+      onClick:(e, els)=>{ if(els.length){ selectDay(WEEK[els[0].index].date); } },
+      plugins:{legend:{display:false}, tooltip:{callbacks:{
+        label: ctx => ` ${fmt(ctx.raw)} kcal`}}},
+      scales:{x:AXIS, y:{...AXIS, beginAtZero:true,
+        suggestedMax: CFG.maintenance_kcal + 200, ticks:{maxTicksLimit:4}}}
+    },
+    plugins:[bandPlugin(CFG.maintenance_kcal, CFG.goal_kcal, C('--amber'))]
+  });
+
+  protChart?.destroy();
+  protChart = new Chart(document.getElementById('protChart'), {
+    type:'bar',
+    data:{labels, datasets:[{
+      data: WEEK.map(d => d.protein_g),
+      backgroundColor: WEEK.map(d => d.protein_g >= CFG.protein_goal_g
+        ? C('--green') : 'rgba(53,192,232,0.35)'),
+      borderRadius:3, maxBarThickness:26,
+    }]},
+    options:{
+      maintainAspectRatio:false,
+      onClick:(e, els)=>{ if(els.length){ selectDay(WEEK[els[0].index].date); } },
+      plugins:{legend:{display:false}, tooltip:{callbacks:{
+        label: ctx => ` ${ctx.raw} g protein`}}},
+      scales:{x:AXIS, y:{...AXIS, beginAtZero:true,
+        suggestedMax: CFG.protein_goal_g + 40, ticks:{maxTicksLimit:4}}}
+    },
+    plugins:[bandPlugin(null, CFG.protein_goal_g, C('--amber'))]
+  });
+}
+
+/* --- day card --- */
+function shiftDay(d, n){
+  const t = new Date(d + 'T12:00:00'); t.setDate(t.getDate() + n);
+  return t.toISOString().slice(0,10);
+}
+
+async function selectDay(day){
+  selectedDay = day;
+  const t = await j('/api/day/' + day);
+  document.getElementById('dayNavDate').textContent = dLabel(day);
+
+  const head = document.getElementById('dayHead');
+  head.innerHTML = '';
+  const dd = document.createElement('span');
+  dd.className = 'day-date'; dd.textContent = day;
+  head.appendChild(dd);
+  if(t.workout_label){
+    const p = document.createElement('span'); p.className = 'pill ok';
+    p.textContent = `${t.workout_label}${t.workout_kcal_burned ? ' · ' + t.workout_kcal_burned + ' kcal' : ''}`;
+    head.appendChild(p);
+  }
+  if(t.weight_kg){
+    const w = document.createElement('span'); w.className = 'pill neutral';
+    w.textContent = t.weight_kg + ' kg'; head.appendChild(w);
+  }
+  const status = t.kcal_eaten > t.maintenance_kcal + t.workout_kcal_burned ? ['flag','FLAG']
+    : t.kcal_eaten > t.goal_kcal ? ['watch','WATCH']
+    : t.on_target ? ['good','✓ ON TARGET'] : ['ok','UNDER GOAL'];
+  if(t.items > 0){
+    const s = document.createElement('span'); s.className = 'pill ' + status[0];
+    s.textContent = status[1]; head.appendChild(s);
+  }
+
+  const big = document.getElementById('dayKcal');
+  big.className = 'bignum ' + (t.kcal_eaten <= t.goal_kcal ? 'under' : 'over');
+  big.innerHTML = `${fmt(t.kcal_eaten)} <span class="unit">/ ${fmt(t.goal_kcal)} kcal</span>`;
+
+  const track = document.getElementById('dayTrack');
+  const maint = t.maintenance_kcal + t.workout_kcal_burned;
+  const pct = Math.min(100, t.kcal_eaten / maint * 100);
+  track.innerHTML = `<div class="fill ${t.kcal_eaten > t.goal_kcal ? 'over' : ''}" style="width:${pct}%"></div>
+    <div class="goalmark" style="left:${Math.min(100, t.goal_kcal / maint * 100)}%"></div>`;
+  document.getElementById('trackGoal').textContent = 'goal ' + fmt(t.goal_kcal);
+  document.getElementById('trackMaint').textContent = 'maint ' + fmt(maint);
+
+  const defOk = t.deficit >= 0;
+  document.getElementById('daySub').innerHTML =
+    `${t.items} items · ${t.protein_g} g protein / ${t.protein_goal_g} g · ` +
+    `<span class="${defOk ? 'ok' : ''}">deficit ${fmt(t.deficit)} kcal ${defOk ? '✓' : ''}</span>`;
+
+  const groups = document.getElementById('mealGroups');
+  groups.innerHTML = '';
+  const order = ['breakfast','lunch','dinner','snack','none'];
+  const total = Math.max(1, t.kcal_eaten);
+  for(const meal of order){
+    const items = t.food.filter(f => f.meal === meal);
+    if(!items.length) continue;
+    const h = document.createElement('div'); h.className = 'meal-title';
+    h.textContent = meal === 'none' ? 'other' : meal;
+    groups.appendChild(h);
+    for(const it of items){
+      const row = document.createElement('div'); row.className = 'item';
+      const detail = [it.grams ? it.grams + ' g' : null, it.raw_or_cooked, it.time]
+        .filter(Boolean).join(' · ');
+      row.innerHTML = `
+        <div><div class="nm">${it.name}</div><div class="detail">${detail}</div></div>
+        <div class="pbar"><i style="width:${Math.min(100, it.kcal/total*100)}%"></i></div>
+        <div class="macros">${it.protein_g} g P · <b>${fmt(it.kcal)}</b></div>`;
+      groups.appendChild(row);
+    }
+  }
+  if(!t.food.length) groups.innerHTML = '<div class="empty">no items logged</div>';
+
+  const thumbs = document.getElementById('foodThumbs');
+  thumbs.innerHTML = '';
+  const seen = new Set();
+  for(const it of t.food){
+    if(it.photo_path && !seen.has(it.photo_path)){
+      seen.add(it.photo_path);
+      const img = document.createElement('img');
+      img.src = '/photos/' + it.photo_path; img.alt = it.name;
+      img.onclick = () => lightbox(img.src);
+      thumbs.appendChild(img);
+    }
+  }
+}
+
+/* --- progress --- */
+function buildProgress(p){
+  const w = p.weight;
+  document.getElementById('progMeta').textContent =
+    p.days_elapsed != null ? `day ${p.days_elapsed}` : 'day 0';
+
+  // labels: actual dates + one projected milestone toward goal weight
+  const labels = w.map(x => dLabel(x.date));
+  const dataW = w.map(x => x.kg);
+  let projData = null;
+  if(w.length){
+    const last = w[w.length - 1];
+    const kgToGo = last.kg - CFG.goal_weight_kg;
+    if(kgToGo > 0){
+      const days = Math.round(kgToGo / 0.5 * 7); // ~0.5 kg/week at ~500 kcal/day deficit
+      const target = new Date(last.date + 'T12:00:00');
+      target.setDate(target.getDate() + days);
+      labels.push(dLabel(target.toISOString().slice(0,10)));
+      projData = Array(w.length - 1).fill(null).concat([last.kg, CFG.goal_weight_kg]);
+      dataW.push(null);
+    }
+  }
+  const datasets = [{
+    label:'weight kg', data:dataW, borderColor:C('--cyan'),
+    pointBackgroundColor:C('--cyan'), pointStyle:'rectRot', pointRadius:5,
+    borderWidth:1.5, tension:0.25,
+  }];
+  if(projData) datasets.push({
+    label:'projection', data:projData, borderColor:'rgba(53,192,232,0.45)',
+    borderDash:[6,5], borderWidth:1.2, pointStyle:'rectRot', pointRadius:4,
+    pointBackgroundColor:C('--amber'), pointBorderColor:C('--amber'),
+  });
+  if(p.waist.length) datasets.push({
+    label:'waist cm', data:p.waist.map(x => ({x:dLabel(x.date), y:x.cm})),
+    borderColor:C('--amber'), pointBackgroundColor:C('--amber'),
+    borderWidth:1.2, pointRadius:3, yAxisID:'y1', tension:0.25,
+  });
+
+  weightChart?.destroy();
+  weightChart = new Chart(document.getElementById('weightChart'), {
+    type:'line', data:{labels, datasets},
+    options:{
+      maintainAspectRatio:false,
+      plugins:{legend:{display:p.waist.length > 0, labels:{boxWidth:8, boxHeight:8}}},
+      scales:{
+        x:AXIS,
+        y:{...AXIS, ticks:{maxTicksLimit:5},
+           suggestedMin: CFG.goal_weight_kg - 1},
+        ...(p.waist.length ? {y1:{position:'right', grid:{display:false},
+           border:{color:C('--border')}, ticks:{maxTicksLimit:5}}} : {})
+      }
+    },
+    plugins:[bandPlugin(null, CFG.goal_weight_kg, C('--teal'))]
+  });
+
+  const tl = document.getElementById('photoTimeline');
+  tl.innerHTML = '';
+  if(!p.photos.length){
+    tl.innerHTML = '<div class="empty">no progress photos yet — send a photo captioned “me” to the bot</div>';
+  }
+  for(const ph of p.photos){
+    const d = document.createElement('div'); d.className = 'tl-item';
+    d.innerHTML = `<img src="/photos/${ph.path}" alt="${ph.date}"><div class="d">${dLabel(ph.date)}</div>`;
+    d.querySelector('img').onclick = e => lightbox(e.target.src);
+    tl.appendChild(d);
+  }
+
+  const cw = document.getElementById('compareWrap');
+  cw.innerHTML = '';
+  if(p.baseline && p.latest && p.baseline.path !== p.latest.path){
+    cw.innerHTML = `
+      <div class="meal-title" style="margin-top:22px">baseline vs latest</div>
+      <div class="compare">
+        <figure><img src="/photos/${p.baseline.path}"><figcaption>day 0 · ${p.baseline.date}</figcaption></figure>
+        <figure><img src="/photos/${p.latest.path}"><figcaption>latest · ${p.latest.date}</figcaption></figure>
+      </div>
+      <div class="delta">${p.days_elapsed} days · <b>${p.delta_kg > 0 ? '+' : ''}${p.delta_kg ?? '—'} kg</b></div>`;
+  }
+}
+
+function lightbox(src){
+  document.getElementById('lightboxImg').src = src;
+  document.getElementById('lightbox').style.display = 'flex';
+}
+
+/* --- init --- */
+async function init(){
+  CFG = await j('/api/config');
+  document.getElementById('sync-date').textContent = dLabel(CFG.today);
+  WEEK = await j('/api/week');
+  buildWeekCharts();
+  await selectDay(CFG.today);
+  buildProgress(await j('/api/progress'));
+  document.getElementById('prevDay').onclick = () => selectDay(shiftDay(selectedDay, -1));
+  document.getElementById('nextDay').onclick = () => selectDay(shiftDay(selectedDay, 1));
+}
+init();
+</script>
+</body>
+</html>

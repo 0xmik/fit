@@ -1,0 +1,217 @@
+"""caltrack Telegram bot — log food (text/photo), weight, waist, workout, progress photos."""
+import io
+import logging
+
+from PIL import Image
+from telegram import Update
+from telegram.ext import (Application, CommandHandler, ContextTypes,
+                          MessageHandler, filters)
+
+import config
+import db
+import estimator
+
+log = logging.getLogger("caltrack.bot")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
+
+PROGRESS_CAPTIONS = {"me", "progress", "body"}
+
+
+def allowed(update: Update) -> bool:
+    """Single-user lock. If TELEGRAM_CHAT_ID is unset (0), accept anyone
+    but log the chat id so it can be pinned in .env."""
+    cid = update.effective_chat.id
+    if config.TELEGRAM_CHAT_ID and cid != config.TELEGRAM_CHAT_ID:
+        log.warning("ignoring message from foreign chat %s", cid)
+        return False
+    return True
+
+
+def fmt_int(n: float) -> str:
+    return f"{int(round(n)):,}".replace(",", " ")  # thin-space thousands
+
+
+def day_summary_line(day: str) -> str:
+    t = db.day_totals(day)
+    check = "✓" if t["deficit"] >= config.DEFICIT_TARGET else ""
+    return (f"today: {fmt_int(t['kcal_eaten'])} / {fmt_int(t['goal_kcal'])} kcal · "
+            f"{t['protein_g']:g}g P · deficit {fmt_int(t['deficit'])} {check}").strip()
+
+
+def save_downscaled(image_bytes: bytes, dest_dir, stem: str) -> str:
+    """Downscale to ~PHOTO_MAX_EDGE long edge, save as JPEG, return path relative to DATA_DIR."""
+    img = Image.open(io.BytesIO(image_bytes))
+    img = img.convert("RGB")
+    img.thumbnail((config.PHOTO_MAX_EDGE, config.PHOTO_MAX_EDGE))
+    path = dest_dir / f"{stem}.jpg"
+    img.save(path, "JPEG", quality=85)
+    return str(path.relative_to(config.DATA_DIR))
+
+
+# --- commands -----------------------------------------------------------------
+
+async def cmd_start(update: Update, _: ContextTypes.DEFAULT_TYPE):
+    cid = update.effective_chat.id
+    log.info("chat id: %s", cid)
+    await update.message.reply_text(
+        f"caltrack 🥩 ready. Your chat id is {cid} — set TELEGRAM_CHAT_ID in .env to lock the bot to you.\n"
+        "Log food as text or photo. Commands: /weight /waist /workout /me /today\n"
+        "Macro numbers are estimates — good for trends, not lab precision.")
+
+
+async def cmd_weight(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):
+        return
+    try:
+        kg = float(ctx.args[0].replace(",", "."))
+    except (IndexError, ValueError):
+        await update.message.reply_text("usage: /weight 85.3")
+        return
+    db.set_day_field(db.today_str(), "weight_kg", kg)
+    await update.message.reply_text(f"✅ weight {kg:g} kg saved for today")
+
+
+async def cmd_waist(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):
+        return
+    try:
+        cm = float(ctx.args[0].replace(",", "."))
+    except (IndexError, ValueError):
+        await update.message.reply_text("usage: /waist 84.5")
+        return
+    db.set_day_field(db.today_str(), "waist_cm", cm)
+    await update.message.reply_text(f"✅ waist {cm:g} cm saved for today")
+
+
+async def cmd_workout(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):
+        return
+    raw = " ".join(ctx.args)
+    if not raw:
+        await update.message.reply_text("usage: /workout upper body (PT), 300")
+        return
+    label, kcal = raw, None
+    if "," in raw:
+        head, _, tail = raw.rpartition(",")
+        try:
+            kcal = int(tail.strip())
+            label = head.strip()
+        except ValueError:
+            pass
+    db.set_workout(db.today_str(), label, kcal)
+    kcal_txt = f" · {kcal} kcal burned" if kcal else ""
+    await update.message.reply_text(f"✅ workout: {label}{kcal_txt}\n{day_summary_line(db.today_str())}")
+
+
+async def cmd_me(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):
+        return
+    ctx.user_data["awaiting_progress_photo"] = True
+    await update.message.reply_text("send the progress photo 📸 (next photo will be saved as today's)")
+
+
+async def cmd_today(update: Update, _: ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):
+        return
+    day = db.today_str()
+    t = db.day_totals(day)
+    with db.connect() as con:
+        items = db.day_items(con, day)
+    lines = [f"📊 {day}"]
+    if t["workout_label"]:
+        lines.append(f"🏋️ {t['workout_label']} ({t['workout_kcal_burned'] or 0} kcal)")
+    if t["weight_kg"]:
+        lines.append(f"⚖️ {t['weight_kg']:g} kg")
+    lines.append(f"🔥 {fmt_int(t['kcal_eaten'])} / {fmt_int(t['goal_kcal'])} kcal")
+    p_check = "✓" if t["protein_g"] >= t["protein_goal_g"] else ""
+    lines.append(f"🥩 {t['protein_g']:g} / {t['protein_goal_g']}g protein {p_check}")
+    d_check = "✓" if t["deficit"] >= config.DEFICIT_TARGET else ""
+    lines.append(f"📉 deficit {fmt_int(t['deficit'])} kcal {d_check}")
+    if items:
+        lines.append("")
+        for it in items:
+            g = f" {it['grams']:g}g" if it["grams"] else ""
+            lines.append(f"· {it['name']}{g} — {it['kcal']} kcal · {it['protein_g']:g}g P")
+    await update.message.reply_text("\n".join(lines))
+
+
+# --- food + photos --------------------------------------------------------------
+
+async def store_items(items: list[dict], photo_path: str | None) -> str:
+    day = db.today_str()
+    lines = []
+    for it in items:
+        db.add_food_item(day, it["meal"], it["name"], it["grams"],
+                         it["raw_or_cooked"], it["kcal"], it["protein_g"],
+                         photo_path=photo_path)
+        g = f" {it['grams']:g}g" if it["grams"] else ""
+        lines.append(f"✅ {it['name']}{g} → {it['kcal']} kcal · {it['protein_g']:g}g P")
+    return "\n".join(lines) + f"\n{day_summary_line(day)}"
+
+
+async def on_text(update: Update, _: ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):
+        return
+    text = update.message.text.strip()
+    await update.message.chat.send_action("typing")
+    try:
+        items = estimator.estimate(text, None, db.now_local().strftime("%H:%M"))
+    except ValueError:
+        await update.message.reply_text("🤔 couldn't parse that — try rephrasing (e.g. `beef stir-fry 263g cooked`)")
+        return
+    if not items:
+        await update.message.reply_text("that didn't look like food — nothing logged")
+        return
+    await update.message.reply_text(await store_items(items, None))
+
+
+async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not allowed(update):
+        return
+    caption = (update.message.caption or "").strip()
+    is_progress = (caption.lower() in PROGRESS_CAPTIONS
+                   or ctx.user_data.pop("awaiting_progress_photo", False))
+    file = await update.message.photo[-1].get_file()
+    image_bytes = bytes(await file.download_as_bytearray())
+    day = db.today_str()
+
+    if is_progress:
+        rel = save_downscaled(image_bytes, config.PROGRESS_DIR, day)
+        db.set_day_field(day, "progress_photo_path", rel)  # overwrite if exists
+        await update.message.reply_text(f"📸 progress photo saved for {day}")
+        return
+
+    # food photo
+    await update.message.chat.send_action("typing")
+    stem = db.now_local().strftime("%Y-%m-%d_%H%M%S")
+    rel = save_downscaled(image_bytes, config.PHOTO_DIR, stem)
+    try:
+        items = estimator.estimate(caption or None, image_bytes, db.now_local().strftime("%H:%M"))
+    except ValueError:
+        await update.message.reply_text("🤔 couldn't read that photo — add a caption describing the food and resend")
+        return
+    if not items:
+        await update.message.reply_text("no food detected in the photo — nothing logged")
+        return
+    await update.message.reply_text(await store_items(items, rel))
+
+
+def main():
+    if not config.TELEGRAM_BOT_TOKEN:
+        raise SystemExit("TELEGRAM_BOT_TOKEN is not set (see .env.example)")
+    db.init_db()
+    app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("weight", cmd_weight))
+    app.add_handler(CommandHandler("waist", cmd_waist))
+    app.add_handler(CommandHandler("workout", cmd_workout))
+    app.add_handler(CommandHandler("me", cmd_me))
+    app.add_handler(CommandHandler("today", cmd_today))
+    app.add_handler(MessageHandler(filters.PHOTO, on_photo))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
+    log.info("caltrack bot polling…")
+    app.run_polling()
+
+
+if __name__ == "__main__":
+    main()
