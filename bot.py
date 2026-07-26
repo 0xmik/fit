@@ -1,6 +1,8 @@
 """caltrack Telegram bot — log food (text/photo), weight, waist, workout, progress photos."""
 import io
 import logging
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from PIL import Image
 from telegram import Update
@@ -25,6 +27,12 @@ def allowed(update: Update) -> bool:
         log.warning("ignoring message from foreign chat %s", cid)
         return False
     return True
+
+
+def msg_time(update: Update) -> datetime:
+    """When the message was SENT, in local time — Telegram queues messages
+    while the bot is offline, so processing time can be hours later."""
+    return update.message.date.astimezone(ZoneInfo(config.TIMEZONE))
 
 
 def fmt_int(n: float) -> str:
@@ -67,8 +75,9 @@ async def cmd_weight(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     except (IndexError, ValueError):
         await update.message.reply_text("usage: /weight 85.3")
         return
-    db.set_day_field(db.today_str(), "weight_kg", kg)
-    await update.message.reply_text(f"✅ weight {kg:g} kg saved for today")
+    day = msg_time(update).date().isoformat()
+    db.set_day_field(day, "weight_kg", kg)
+    await update.message.reply_text(f"✅ weight {kg:g} kg saved for {day}")
 
 
 async def cmd_waist(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -79,8 +88,9 @@ async def cmd_waist(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     except (IndexError, ValueError):
         await update.message.reply_text("usage: /waist 84.5")
         return
-    db.set_day_field(db.today_str(), "waist_cm", cm)
-    await update.message.reply_text(f"✅ waist {cm:g} cm saved for today")
+    day = msg_time(update).date().isoformat()
+    db.set_day_field(day, "waist_cm", cm)
+    await update.message.reply_text(f"✅ waist {cm:g} cm saved for {day}")
 
 
 async def cmd_workout(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -98,9 +108,10 @@ async def cmd_workout(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             label = head.strip()
         except ValueError:
             pass
-    db.set_workout(db.today_str(), label, kcal)
+    day = msg_time(update).date().isoformat()
+    db.set_workout(day, label, kcal)
     kcal_txt = f" · {kcal} kcal burned" if kcal else ""
-    await update.message.reply_text(f"✅ workout: {label}{kcal_txt}\n{day_summary_line(db.today_str())}")
+    await update.message.reply_text(f"✅ workout: {label}{kcal_txt}\n{day_summary_line(day)}")
 
 
 async def cmd_me(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -137,12 +148,13 @@ async def cmd_today(update: Update, _: ContextTypes.DEFAULT_TYPE):
 
 # --- food + photos --------------------------------------------------------------
 
-async def store_items(items: list[dict], photo_path: str | None) -> str:
-    day = db.today_str()
+async def store_items(items: list[dict], photo_path: str | None, when: datetime) -> str:
+    day = when.date().isoformat()
     lines = []
     for it in items:
         db.add_food_item(day, it["meal"], it["name"], it["grams"],
                          it["raw_or_cooked"], it["kcal"], it["protein_g"],
+                         logged_at=when.isoformat(timespec="seconds"),
                          photo_path=photo_path)
         g = f" {it['grams']:g}g" if it["grams"] else ""
         lines.append(f"✅ {it['name']}{g} → {it['kcal']} kcal · {it['protein_g']:g}g P")
@@ -153,16 +165,17 @@ async def on_text(update: Update, _: ContextTypes.DEFAULT_TYPE):
     if not allowed(update):
         return
     text = update.message.text.strip()
+    when = msg_time(update)
     await update.message.chat.send_action("typing")
     try:
-        items = estimator.estimate(text, None, db.now_local().strftime("%H:%M"))
+        items = estimator.estimate(text, None, when.strftime("%H:%M"))
     except ValueError:
         await update.message.reply_text("🤔 couldn't parse that — try rephrasing (e.g. `beef stir-fry 263g cooked`)")
         return
     if not items:
         await update.message.reply_text("that didn't look like food — nothing logged")
         return
-    await update.message.reply_text(await store_items(items, None))
+    await update.message.reply_text(await store_items(items, None, when))
 
 
 async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -173,7 +186,8 @@ async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                    or ctx.user_data.pop("awaiting_progress_photo", False))
     file = await update.message.photo[-1].get_file()
     image_bytes = bytes(await file.download_as_bytearray())
-    day = db.today_str()
+    when = msg_time(update)
+    day = when.date().isoformat()
 
     if is_progress:
         rel = save_downscaled(image_bytes, config.PROGRESS_DIR, day)
@@ -183,17 +197,17 @@ async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     # food photo
     await update.message.chat.send_action("typing")
-    stem = db.now_local().strftime("%Y-%m-%d_%H%M%S")
+    stem = when.strftime("%Y-%m-%d_%H%M%S")
     rel = save_downscaled(image_bytes, config.PHOTO_DIR, stem)
     try:
-        items = estimator.estimate(caption or None, image_bytes, db.now_local().strftime("%H:%M"))
+        items = estimator.estimate(caption or None, image_bytes, when.strftime("%H:%M"))
     except ValueError:
         await update.message.reply_text("🤔 couldn't read that photo — add a caption describing the food and resend")
         return
     if not items:
         await update.message.reply_text("no food detected in the photo — nothing logged")
         return
-    await update.message.reply_text(await store_items(items, rel))
+    await update.message.reply_text(await store_items(items, rel, when))
 
 
 def main():
