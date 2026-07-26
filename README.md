@@ -66,6 +66,8 @@ To keep both alive, either run them in `tmux` or add two tiny systemd units /
 | `/waist 84.5` | sets today's waist |
 | `/workout upper body (PT), 300` | sets workout label + kcal burned |
 | `/today` | today's summary + item list |
+| `/del` | list today's items numbered; `/del 3` deletes item 3 |
+| `/undo` | delete the last logged item |
 | `/start` | shows your chat id (pin it via `TELEGRAM_CHAT_ID` in `.env`) |
 
 Deficit = `(maintenance + workout kcal) − eaten`. A day is *on target* when

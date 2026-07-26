@@ -67,7 +67,7 @@ async def cmd_start(update: Update, _: ContextTypes.DEFAULT_TYPE):
     log.info("chat id: %s", cid)
     await update.message.reply_text(
         f"caltrack 🥩 ready. Your chat id is {cid} — set TELEGRAM_CHAT_ID in .env to lock the bot to you.\n"
-        "Log food as text or photo. Commands: /weight /waist /workout /me /today\n"
+        "Log food as text or photo. Commands: /weight /waist /workout /me /today /del /undo\n"
         "Macro numbers are estimates — good for trends, not lab precision.")
 
 
@@ -123,6 +123,55 @@ async def cmd_me(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     ctx.user_data["awaiting_progress_photo"] = True
     await update.message.reply_text("send the progress photo 📸 (next photo will be saved as today's)")
+
+
+async def cmd_del(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """/del → numbered list of today's items; /del 3 → delete item 3."""
+    if not allowed(update):
+        return
+    day = msg_time(update).date().isoformat()
+    with db.connect() as con:
+        items = db.day_items(con, day)
+    if not items:
+        await update.message.reply_text("nothing logged today")
+        return
+    if not ctx.args:
+        lines = [f"{i + 1}. {it['name']} — {it['kcal']} kcal · {it['protein_g']:g}g P"
+                 for i, it in enumerate(items)]
+        lines.append("\ndelete with /del <number>")
+        await update.message.reply_text("\n".join(lines))
+        return
+    try:
+        idx = int(ctx.args[0]) - 1
+        item = items[idx]
+        if idx < 0:
+            raise IndexError
+    except (ValueError, IndexError):
+        await update.message.reply_text(f"usage: /del 1..{len(items)} (see /del for the list)")
+        return
+    with db.connect() as con:
+        con.execute("DELETE FROM food_items WHERE id = ?", (item["id"],))
+    await update.message.reply_text(
+        f"🗑 removed: {item['name']} ({item['kcal']} kcal · {item['protein_g']:g}g P)\n"
+        f"{day_summary_line(day)}")
+
+
+async def cmd_undo(update: Update, _: ContextTypes.DEFAULT_TYPE):
+    """Delete the most recently logged item of today."""
+    if not allowed(update):
+        return
+    day = msg_time(update).date().isoformat()
+    with db.connect() as con:
+        items = db.day_items(con, day)
+    if not items:
+        await update.message.reply_text("nothing logged today")
+        return
+    item = items[-1]
+    with db.connect() as con:
+        con.execute("DELETE FROM food_items WHERE id = ?", (item["id"],))
+    await update.message.reply_text(
+        f"🗑 removed last item: {item['name']} ({item['kcal']} kcal · {item['protein_g']:g}g P)\n"
+        f"{day_summary_line(day)}")
 
 
 async def cmd_today(update: Update, _: ContextTypes.DEFAULT_TYPE):
@@ -225,6 +274,8 @@ def main():
     app.add_handler(CommandHandler("workout", cmd_workout))
     app.add_handler(CommandHandler("me", cmd_me))
     app.add_handler(CommandHandler("today", cmd_today))
+    app.add_handler(CommandHandler("del", cmd_del))
+    app.add_handler(CommandHandler("undo", cmd_undo))
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
     log.info("caltrack bot polling…")
