@@ -4,11 +4,12 @@ from pathlib import Path
 
 # --- goals (editable) --------------------------------------------------------
 GOAL_KCAL = 1900          # daily calorie target
-MAINTENANCE_KCAL = 2400   # maintenance; deficit is measured against this
-DEFICIT_TARGET = 500      # kcal/day under maintenance I aim for
-PROTEIN_GOAL_G = 152      # protein floor (2 g/kg at 87.2 kg would be ~174 g)
+MAINTENANCE_KCAL = 2400   # Mifflin-St Jeor @174cm/87.2kg + office job, 6k steps, 1x padel
+                          # → ~2400-2500; recalibrate after 3-4 weeks of real trend data
+DEFICIT_TARGET = 500      # kcal/day under maintenance ≈ 0.5 kg/week
+PROTEIN_GOAL_G = 170      # protein floor, ~2 g/kg while cutting to preserve muscle
 BODYWEIGHT_KG = 87.2      # baseline 2026-07-26, editable
-GOAL_WEIGHT_KG = 80.0     # where the dashed projection line points
+GOAL_WEIGHT_KG = 80.0     # checkpoint, not final — reassess visually around here
 TIMEZONE = "Europe/Zurich"
 
 # --- paths -------------------------------------------------------------------
