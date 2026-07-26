@@ -4,8 +4,9 @@ from pathlib import Path
 
 # --- goals (editable) --------------------------------------------------------
 GOAL_KCAL = 1900          # daily calorie target
-MAINTENANCE_KCAL = 2400   # Mifflin-St Jeor @174cm/87.2kg + office job, 6k steps, 1x padel
-                          # → ~2400-2500; recalibrate after 3-4 weeks of real trend data
+MAINTENANCE_KCAL = 2400   # Mifflin-St Jeor @38y/174cm/87.2kg (BMR ~1775) + office job,
+                          # 6k steps, 1x padel → ~2440-2490; slightly conservative.
+                          # Recalibrate after 3-4 weeks of real trend data.
 DEFICIT_TARGET = 500      # kcal/day under maintenance ≈ 0.5 kg/week
 PROTEIN_GOAL_G = 170      # protein floor, ~2 g/kg while cutting to preserve muscle
 BODYWEIGHT_KG = 87.2      # baseline 2026-07-26, editable
