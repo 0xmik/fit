@@ -66,7 +66,7 @@ async def cmd_start(update: Update, _: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
     log.info("chat id: %s", cid)
     await update.message.reply_text(
-        f"Health Cockpit 🥩 ready. Your chat id is {cid} — set TELEGRAM_CHAT_ID in .env to lock the bot to you.\n"
+        f"Health Cockpit ready. Your chat id is {cid} — set TELEGRAM_CHAT_ID in .env to lock the bot to you.\n"
         "Log food as text or photo. Commands: /weight /waist /workout /me /today /del /undo\n"
         "Macro numbers are estimates — good for trends, not lab precision.")
 
@@ -188,7 +188,7 @@ async def cmd_today(update: Update, _: ContextTypes.DEFAULT_TYPE):
         lines.append(f"⚖️ {t['weight_kg']:g} kg")
     lines.append(f"🔥 {fmt_int(t['kcal_eaten'])} / {fmt_int(t['goal_kcal'])} kcal")
     p_check = "✓" if t["protein_g"] >= t["protein_goal_g"] else ""
-    lines.append(f"🥩 {t['protein_g']:g} / {t['protein_goal_g']}g protein {p_check}")
+    lines.append(f"💪 {t['protein_g']:g} / {t['protein_goal_g']}g protein {p_check}")
     d_check = "✓" if t["deficit"] >= config.DEFICIT_TARGET else ""
     lines.append(f"📉 deficit {fmt_int(t['deficit'])} kcal {d_check}")
     if items:
