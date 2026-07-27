@@ -18,7 +18,9 @@ app.mount("/photos", StaticFiles(directory=config.DATA_DIR), name="photos")
 
 @app.get("/")
 def index():
-    return FileResponse(config.BASE_DIR / "static" / "index.html")
+    # no-cache so browsers always pick up UI updates without a hard reload
+    return FileResponse(config.BASE_DIR / "static" / "index.html",
+                        headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/api/config")
