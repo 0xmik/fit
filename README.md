@@ -1,4 +1,4 @@
-# caltrack 🥩
+# Health Cockpit 🥩
 
 Single-user calorie + protein tracker: **Telegram bot** for logging, **dark web
 dashboard** for viewing, **progress-photo timeline**. One app, one SQLite DB,

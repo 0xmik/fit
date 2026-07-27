@@ -1,4 +1,4 @@
-"""caltrack config — edit goals here. Secrets come from .env / environment."""
+"""Health Cockpit config — edit goals here. Secrets come from .env / environment."""
 import os
 from pathlib import Path
 

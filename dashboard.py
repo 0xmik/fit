@@ -1,4 +1,4 @@
-"""caltrack dashboard — FastAPI backend serving JSON + the static dark HTML page."""
+"""Health Cockpit dashboard — FastAPI backend serving JSON + the static dark HTML page."""
 from datetime import date, datetime
 
 from fastapi import FastAPI, HTTPException
@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 import config
 import db
 
-app = FastAPI(title="caltrack", docs_url=None, redoc_url=None)
+app = FastAPI(title="Health Cockpit", docs_url=None, redoc_url=None)
 
 db.init_db()
 config.ensure_dirs()

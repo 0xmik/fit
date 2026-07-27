@@ -1,4 +1,4 @@
-"""caltrack Telegram bot — log food (text/photo), weight, waist, workout, progress photos."""
+"""Health Cockpit Telegram bot — log food (text/photo), weight, waist, workout, progress photos."""
 from __future__ import annotations  # Python 3.9 compat for `X | None` hints
 
 import io
@@ -66,7 +66,7 @@ async def cmd_start(update: Update, _: ContextTypes.DEFAULT_TYPE):
     cid = update.effective_chat.id
     log.info("chat id: %s", cid)
     await update.message.reply_text(
-        f"caltrack 🥩 ready. Your chat id is {cid} — set TELEGRAM_CHAT_ID in .env to lock the bot to you.\n"
+        f"Health Cockpit 🥩 ready. Your chat id is {cid} — set TELEGRAM_CHAT_ID in .env to lock the bot to you.\n"
         "Log food as text or photo. Commands: /weight /waist /workout /me /today /del /undo\n"
         "Macro numbers are estimates — good for trends, not lab precision.")
 
@@ -278,7 +278,7 @@ def main():
     app.add_handler(CommandHandler("undo", cmd_undo))
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
-    log.info("caltrack bot polling…")
+    log.info("health cockpit bot polling…")
     app.run_polling()
 
 
