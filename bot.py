@@ -263,6 +263,77 @@ async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(await store_items(items, rel, when))
 
 
+# --- reminders ------------------------------------------------------------------
+
+def _days_since_last(field: str) -> int | None:
+    """Days since `field` was last recorded; None if never."""
+    with db.connect() as con:
+        row = con.execute(
+            f"SELECT date FROM days WHERE {field} IS NOT NULL ORDER BY date DESC LIMIT 1"
+        ).fetchone()
+    if not row:
+        return None
+    from datetime import date as _date
+    return (_date.fromisoformat(db.today_str()) - _date.fromisoformat(row["date"])).days
+
+
+async def job_morning(context):
+    if not config.TELEGRAM_CHAT_ID:
+        return
+    day = db.today_str()
+    with db.connect() as con:
+        d = db.day_row(con, day)
+    gaps = []
+    if not d or not d["progress_photo_path"]:
+        gaps.append("📸 progress photo — send a photo captioned `me`")
+    for field, cmd, label in (("weight_kg", "/weight", "⚖️ weigh-in"),
+                              ("waist_cm", "/waist", "📏 waist")):
+        since = _days_since_last(field)
+        if since is None or since >= 7:
+            gaps.append(f"{label} — last {'never' if since is None else f'{since}d ago'} ({cmd})")
+    if gaps:
+        await context.bot.send_message(
+            config.TELEGRAM_CHAT_ID, "🌅 morning check — still open:\n" + "\n".join(gaps))
+
+
+async def job_evening(context):
+    if not config.TELEGRAM_CHAT_ID:
+        return
+    t = db.day_totals(db.today_str())
+    if t["items"] == 0:
+        await context.bot.send_message(
+            config.TELEGRAM_CHAT_ID,
+            "🌙 nothing logged today — forgot to track? Send it now, I'll book it to today.")
+        return
+    protein_gap = t["protein_goal_g"] - t["protein_g"]
+    if protein_gap > config.PROTEIN_REMINDER_GAP_G:
+        kcal_left = t["goal_kcal"] - t["kcal_eaten"]
+        await context.bot.send_message(
+            config.TELEGRAM_CHAT_ID,
+            f"🌙 protein check: {t['protein_g']:g}g of {t['protein_goal_g']}g — "
+            f"{protein_gap:g}g short, {max(kcal_left, 0)} kcal left in budget.\n"
+            "Quick fix: skyr/quark (~11g P per 100g) or a can of tuna (~25g P).")
+
+
+def _parse_hhmm(s: str):
+    from datetime import time as _time
+    h, m = s.split(":")
+    return _time(int(h), int(m), tzinfo=ZoneInfo(config.TIMEZONE))
+
+
+def schedule_reminders(app) -> None:
+    if app.job_queue is None:
+        log.warning("reminders disabled — install: pip install 'python-telegram-bot[job-queue]'")
+        return
+    if config.REMINDER_MORNING:
+        app.job_queue.run_daily(job_morning, _parse_hhmm(config.REMINDER_MORNING))
+    if config.REMINDER_EVENING:
+        app.job_queue.run_daily(job_evening, _parse_hhmm(config.REMINDER_EVENING))
+    log.info("reminders scheduled: morning %s, evening %s (%s)",
+             config.REMINDER_MORNING or "off", config.REMINDER_EVENING or "off",
+             config.TIMEZONE)
+
+
 def main():
     if not config.TELEGRAM_BOT_TOKEN:
         raise SystemExit("TELEGRAM_BOT_TOKEN is not set (see .env.example)")
@@ -278,6 +349,7 @@ def main():
     app.add_handler(CommandHandler("undo", cmd_undo))
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
+    schedule_reminders(app)
     log.info("health cockpit bot polling…")
     app.run_polling()
 

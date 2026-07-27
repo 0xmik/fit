@@ -13,6 +13,11 @@ BODYWEIGHT_KG = 87.2      # baseline 2026-07-26, editable
 GOAL_WEIGHT_KG = 80.0     # checkpoint, not final — reassess visually around here
 TIMEZONE = "Europe/Zurich"
 
+# --- reminders (bot pings you only when something is missing; "" disables) ----
+REMINDER_MORNING = "08:30"  # progress photo / stale weight / stale waist
+REMINDER_EVENING = "21:00"  # nothing logged yet, or protein far below floor
+PROTEIN_REMINDER_GAP_G = 25 # evening ping if more than this many grams short
+
 # --- paths -------------------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"

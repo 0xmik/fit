@@ -70,6 +70,12 @@ To keep both alive, either run them in `tmux` or add two tiny systemd units /
 | `/undo` | delete the last logged item |
 | `/start` | shows your chat id (pin it via `TELEGRAM_CHAT_ID` in `.env`) |
 
+**Reminders:** the bot pings you only when something is missing — mornings
+(08:30) for progress photo / stale weight / stale waist, evenings (21:00) if
+nothing is logged or protein is >25 g short. Times and threshold live in
+`config.py`; set to `""` to disable. Requires `TELEGRAM_CHAT_ID` in `.env`
+and only fires while the bot is running.
+
 Deficit = `(maintenance + workout kcal) − eaten`. A day is *on target* when
 eaten ≤ goal **and** protein ≥ floor. Photos are downscaled to ~1080 px and
 stay local in `data/` — nothing leaves the box except the API calls for
