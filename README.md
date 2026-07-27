@@ -71,7 +71,7 @@ To keep both alive, either run them in `tmux` or add two tiny systemd units /
 | `/start` | shows your chat id (pin it via `TELEGRAM_CHAT_ID` in `.env`) |
 
 **Reminders:** the bot pings you only when something is missing — mornings
-(08:30) for progress photo / stale weight / stale waist, evenings (21:00) if
+(07:30) when progress photo, weight or waist is >7 days stale, evenings (21:00) if
 nothing is logged or protein is >25 g short. Times and threshold live in
 `config.py`; set to `""` to disable. Requires `TELEGRAM_CHAT_ID` in `.env`
 and only fires while the bot is running.

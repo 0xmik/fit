@@ -280,13 +280,9 @@ def _days_since_last(field: str) -> int | None:
 async def job_morning(context):
     if not config.TELEGRAM_CHAT_ID:
         return
-    day = db.today_str()
-    with db.connect() as con:
-        d = db.day_row(con, day)
     gaps = []
-    if not d or not d["progress_photo_path"]:
-        gaps.append("📸 progress photo — send a photo captioned `me`")
-    for field, cmd, label in (("weight_kg", "/weight", "⚖️ weigh-in"),
+    for field, cmd, label in (("progress_photo_path", "photo captioned `me`", "📸 progress photo"),
+                              ("weight_kg", "/weight", "⚖️ weigh-in"),
                               ("waist_cm", "/waist", "📏 waist")):
         since = _days_since_last(field)
         if since is None or since >= 7:
