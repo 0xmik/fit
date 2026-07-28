@@ -3,7 +3,7 @@ from __future__ import annotations  # Python 3.9 compat for `X | None` hints
 
 import io
 import logging
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from PIL import Image
@@ -37,6 +37,21 @@ def msg_time(update: Update) -> datetime:
     """When the message was SENT, in local time — Telegram queues messages
     while the bot is offline, so processing time can be hours later."""
     return update.message.date.astimezone(ZoneInfo(config.TIMEZONE))
+
+
+def pop_day(update: Update, args: list) -> tuple:
+    """Allow a leading date token so forgotten entries can be filed later:
+    `gestern` / `yesterday` / `YYYY-MM-DD`. Returns (day, remaining_args)."""
+    day = msg_time(update).date()
+    if args:
+        token = args[0].lower()
+        if token in ("gestern", "yesterday"):
+            return (day - timedelta(days=1)).isoformat(), args[1:]
+        try:
+            return date.fromisoformat(args[0]).isoformat(), args[1:]
+        except ValueError:
+            pass
+    return day.isoformat(), args
 
 
 def fmt_int(n: float) -> str:
@@ -74,12 +89,12 @@ async def cmd_start(update: Update, _: ContextTypes.DEFAULT_TYPE):
 async def cmd_weight(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not allowed(update):
         return
+    day, args = pop_day(update, ctx.args)
     try:
-        kg = float(ctx.args[0].replace(",", "."))
+        kg = float(args[0].replace(",", "."))
     except (IndexError, ValueError):
-        await update.message.reply_text("usage: /weight 85.3")
+        await update.message.reply_text("usage: /weight 85.3  (or: /weight gestern 85.3)")
         return
-    day = msg_time(update).date().isoformat()
     db.set_day_field(day, "weight_kg", kg)
     await update.message.reply_text(f"✅ weight {kg:g} kg saved for {day}")
 
@@ -87,12 +102,12 @@ async def cmd_weight(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def cmd_waist(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not allowed(update):
         return
+    day, args = pop_day(update, ctx.args)
     try:
-        cm = float(ctx.args[0].replace(",", "."))
+        cm = float(args[0].replace(",", "."))
     except (IndexError, ValueError):
-        await update.message.reply_text("usage: /waist 84.5")
+        await update.message.reply_text("usage: /waist 84.5  (or: /waist gestern 84.5)")
         return
-    day = msg_time(update).date().isoformat()
     db.set_day_field(day, "waist_cm", cm)
     await update.message.reply_text(f"✅ waist {cm:g} cm saved for {day}")
 
@@ -100,9 +115,11 @@ async def cmd_waist(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def cmd_workout(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not allowed(update):
         return
-    raw = " ".join(ctx.args)
+    day, args = pop_day(update, ctx.args)
+    raw = " ".join(args)
     if not raw:
-        await update.message.reply_text("usage: /workout upper body (PT), 300")
+        await update.message.reply_text(
+            "usage: /workout upper body (PT), 300  (or: /workout gestern dumbbells 20min, 100)")
         return
     label, kcal = raw, None
     if "," in raw:
@@ -112,10 +129,10 @@ async def cmd_workout(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             label = head.strip()
         except ValueError:
             pass
-    day = msg_time(update).date().isoformat()
     db.set_workout(day, label, kcal)
     kcal_txt = f" · {kcal} kcal burned" if kcal else ""
-    await update.message.reply_text(f"✅ workout: {label}{kcal_txt}\n{day_summary_line(day)}")
+    await update.message.reply_text(
+        f"✅ workout ({day}): {label}{kcal_txt}\n{day_summary_line(day)}")
 
 
 async def cmd_me(update: Update, ctx: ContextTypes.DEFAULT_TYPE):

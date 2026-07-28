@@ -65,6 +65,7 @@ To keep both alive, either run them in `tmux` or add two tiny systemd units /
 | `/weight 85.3` | sets today's weight |
 | `/waist 84.5` | sets today's waist |
 | `/workout upper body (PT), 300` | sets workout label + kcal burned |
+| `/workout gestern ..., 100` | same, filed to a past day (`gestern` / `yesterday` / `YYYY-MM-DD`; works for `/weight` and `/waist` too) |
 | `/today` | today's summary + item list |
 | `/del` | list today's items numbered; `/del 3` deletes item 3 |
 | `/undo` | delete the last logged item |
