@@ -214,7 +214,11 @@ const fmt = n => Math.round(n).toLocaleString('en-US').replace(/,/g, ' ');
 const dLabel = d => new Date(d + 'T12:00:00').toLocaleDateString('en-GB',
   {day:'2-digit', month:'short'}).toUpperCase().replace('.','');
 
-async function j(url){ const r = await fetch(url); return r.json(); }
+async function j(url){
+  const r = await fetch(url);
+  if(!r.ok) throw new Error(`${url} → ${r.status}`);
+  return r.json();
+}
 
 /* --- band + target line plugin (maintenance band, goal line) --- */
 function bandPlugin(bandVal, lineVal, lineColor){
@@ -377,6 +381,10 @@ async function selectDay(day){
 
 /* --- training --- */
 function buildTraining(days){
+  if(!Array.isArray(days) || !days.length){
+    document.getElementById('trainLast').textContent = 'no workout data';
+    return;
+  }
   const lvl = k => k === 0 ? 0 : k < 250 ? 1 : k <= 450 ? 2 : 3;
   const grid = document.getElementById('trainGrid');
   grid.innerHTML = '';
@@ -509,14 +517,20 @@ function lightbox(src){
 }
 
 /* --- init --- */
+// one failing section must never blank the rest of the page
+async function section(name, fn, onFail){
+  try { await fn(); }
+  catch(e){ console.error(`${name} failed:`, e); onFail && onFail(e); }
+}
+
 async function init(){
   CFG = await j('/api/config');
   document.getElementById('sync-date').textContent = dLabel(CFG.today);
-  WEEK = await j('/api/week');
-  buildWeekCharts();
-  await selectDay(CFG.today);
-  buildTraining(await j('/api/workouts'));
-  buildProgress(await j('/api/progress'));
+  await section('week', async () => { WEEK = await j('/api/week'); buildWeekCharts(); });
+  await section('day', () => selectDay(CFG.today));
+  await section('training', async () => buildTraining(await j('/api/workouts')),
+    () => document.getElementById('trainLast').textContent = 'training data unavailable — restart the dashboard');
+  await section('progress', async () => buildProgress(await j('/api/progress')));
   document.getElementById('prevDay').onclick = () => selectDay(shiftDay(selectedDay, -1));
   document.getElementById('nextDay').onclick = () => selectDay(shiftDay(selectedDay, 1));
 }
