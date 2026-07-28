@@ -58,7 +58,9 @@ header .sync{color:var(--muted)}
 .day-date{font-size:13px;letter-spacing:.14em;text-transform:uppercase}
 .bignum{font-size:44px;font-weight:300;line-height:1.1;margin:8px 0 2px}
 .bignum .unit{font-size:13px;color:var(--muted);font-weight:400;margin-left:6px}
-.bignum.under{color:var(--green)} .bignum.over{color:var(--coral)}
+.bignum.good{color:var(--green)}
+.bignum.watch{color:var(--amber)}
+.bignum.over{color:var(--coral)}
 .subline{font-size:12px;color:var(--muted);margin-bottom:14px}
 .subline .ok{color:var(--green)}
 
@@ -67,6 +69,7 @@ header .sync{color:var(--muted)}
   border-radius:7px;margin:10px 0 4px;overflow:visible}
 .track .fill{position:absolute;top:0;left:0;height:100%;border-radius:7px 0 0 7px;
   background:linear-gradient(90deg,#1E7FA0,var(--cyan))}
+.track .fill.watch{background:linear-gradient(90deg,#8A6524,var(--amber))}
 .track .fill.over{background:linear-gradient(90deg,#A0472C,var(--coral))}
 .track .goalmark{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--amber)}
 .track-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);
@@ -211,6 +214,12 @@ let CFG = null, WEEK = [], selectedDay = null;
 let calChart, protChart, weightChart;
 
 const fmt = n => Math.round(n).toLocaleString('en-US').replace(/,/g, ' ');
+
+// three honest states: at goal · over goal but still in deficit · no deficit left
+function calState(kcal, goal, maint){
+  return kcal <= goal ? 'good' : kcal <= maint ? 'watch' : 'over';
+}
+const CAL_COLOR = {good:'--green', watch:'--amber', over:'--coral'};
 const dLabel = d => new Date(d + 'T12:00:00').toLocaleDateString('en-GB',
   {day:'2-digit', month:'short'}).toUpperCase().replace('.','');
 
@@ -257,7 +266,8 @@ function buildWeekCharts(){
     type:'bar',
     data:{labels, datasets:[{
       data: WEEK.map(d => d.kcal_eaten),
-      backgroundColor: WEEK.map(d => d.kcal_eaten > CFG.goal_kcal ? C('--coral') : C('--green')),
+      backgroundColor: WEEK.map(d => C(CAL_COLOR[calState(
+        d.kcal_eaten, CFG.goal_kcal, d.maintenance_kcal + d.workout_kcal_burned)])),
       borderRadius:3, maxBarThickness:26,
     }]},
     options:{
@@ -276,8 +286,9 @@ function buildWeekCharts(){
     type:'bar',
     data:{labels, datasets:[{
       data: WEEK.map(d => d.protein_g),
-      backgroundColor: WEEK.map(d => d.protein_g >= CFG.protein_goal_g
-        ? C('--green') : 'rgba(53,192,232,0.35)'),
+      // a near miss is not a failure — 90%+ still counts as on track
+      backgroundColor: WEEK.map(d => d.protein_g >= CFG.protein_goal_g ? C('--green')
+        : d.protein_g >= CFG.protein_goal_g * 0.9 ? C('--cyan') : 'rgba(53,192,232,0.3)'),
       borderRadius:3, maxBarThickness:26,
     }]},
     options:{
@@ -325,14 +336,16 @@ async function selectDay(day){
     s.textContent = status[1]; head.appendChild(s);
   }
 
+  const maint = t.maintenance_kcal + t.workout_kcal_burned;
+  const state = calState(t.kcal_eaten, t.goal_kcal, maint);
+
   const big = document.getElementById('dayKcal');
-  big.className = 'bignum ' + (t.kcal_eaten <= t.goal_kcal ? 'under' : 'over');
+  big.className = 'bignum ' + state;
   big.innerHTML = `${fmt(t.kcal_eaten)} <span class="unit">/ ${fmt(t.goal_kcal)} kcal</span>`;
 
   const track = document.getElementById('dayTrack');
-  const maint = t.maintenance_kcal + t.workout_kcal_burned;
   const pct = Math.min(100, t.kcal_eaten / maint * 100);
-  track.innerHTML = `<div class="fill ${t.kcal_eaten > t.goal_kcal ? 'over' : ''}" style="width:${pct}%"></div>
+  track.innerHTML = `<div class="fill ${state}" style="width:${pct}%"></div>
     <div class="goalmark" style="left:${Math.min(100, t.goal_kcal / maint * 100)}%"></div>`;
   document.getElementById('trackGoal').textContent = 'goal ' + fmt(t.goal_kcal);
   document.getElementById('trackMaint').textContent = 'maint ' + fmt(maint);
