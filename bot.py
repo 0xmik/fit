@@ -311,6 +311,34 @@ async def job_evening(context):
             "Quick fix: skyr/quark (~11g P per 100g) or a can of tuna (~25g P).")
 
 
+async def job_weekly(context):
+    """Sunday evening: how the week actually went."""
+    if not config.TELEGRAM_CHAT_ID:
+        return
+    s = db.week_summary(7)
+    if s["logged_days"] == 0:
+        return
+    lines = [f"📈 week in review — {s['logged_days']}/7 days logged", ""]
+    lines.append(f"🔥 Ø {fmt_int(s['avg_kcal'])} kcal/day (goal {fmt_int(config.GOAL_KCAL)})")
+    p_mark = "✓" if s["avg_protein"] >= config.PROTEIN_GOAL_G else ""
+    lines.append(f"💪 Ø {s['avg_protein']}g protein (floor {config.PROTEIN_GOAL_G}) {p_mark}".strip())
+    lines.append(f"📉 Ø deficit {fmt_int(s['avg_deficit'])} kcal/day")
+    lines.append(f"🎯 {s['on_target_days']}/{s['logged_days']} days fully on target")
+    lines.append(f"🏋️ {s['workouts']} workouts · {fmt_int(s['workout_kcal'])} kcal burned")
+    if s["weight_first"] is not None and s["weight_last"] is not None:
+        delta = round(s["weight_last"] - s["weight_first"], 2)
+        arrow = "↓" if delta < 0 else ("↑" if delta > 0 else "→")
+        lines.append(f"⚖️ {s['weight_last']:g} kg ({arrow} {abs(delta):g} kg this week)")
+    elif s["weight_last"] is not None:
+        lines.append(f"⚖️ {s['weight_last']:g} kg")
+    if s["waist_last"] is not None:
+        lines.append(f"📏 waist {s['waist_last']:g} cm")
+    # ~7700 kcal per kg of fat — a rough but useful weekly expectation
+    lines += ["", f"expected from deficit alone: ~{s['avg_deficit'] * 7 / 7700:.1f} kg/week."
+                  " Scale moves slower or faster short-term — the trend is what counts."]
+    await context.bot.send_message(config.TELEGRAM_CHAT_ID, "\n".join(lines))
+
+
 def _parse_hhmm(s: str):
     from datetime import time as _time
     h, m = s.split(":")
@@ -325,9 +353,11 @@ def schedule_reminders(app) -> None:
         app.job_queue.run_daily(job_morning, _parse_hhmm(config.REMINDER_MORNING))
     if config.REMINDER_EVENING:
         app.job_queue.run_daily(job_evening, _parse_hhmm(config.REMINDER_EVENING))
-    log.info("reminders scheduled: morning %s, evening %s (%s)",
+    if config.WEEKLY_REPORT:
+        app.job_queue.run_daily(job_weekly, _parse_hhmm(config.WEEKLY_REPORT), days=(0,))  # 0 = Sunday
+    log.info("reminders scheduled: morning %s, evening %s, weekly report sun %s (%s)",
              config.REMINDER_MORNING or "off", config.REMINDER_EVENING or "off",
-             config.TIMEZONE)
+             config.WEEKLY_REPORT or "off", config.TIMEZONE)
 
 
 def main():

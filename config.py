@@ -17,6 +17,7 @@ TIMEZONE = "Europe/Zurich"
 REMINDER_MORNING = "07:30"  # progress photo / stale weight / stale waist
 REMINDER_EVENING = "21:00"  # nothing logged yet, or protein far below floor
 PROTEIN_REMINDER_GAP_G = 25 # evening ping if more than this many grams short
+WEEKLY_REPORT = "19:00"     # Sunday week-in-review; "" disables
 
 # --- paths -------------------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent

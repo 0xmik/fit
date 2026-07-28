@@ -13,7 +13,7 @@ db.py            SQLite schema + queries (plain SQL)
 estimator.py     Anthropic API food estimation (text/photo → strict JSON)
 bot.py           Telegram bot (logging)
 dashboard.py     FastAPI backend (JSON API + static page)
-static/index.html  the dashboard (Chart.js, dark telemetry theme)
+static/index.html  the dashboard: weekly bars, day log, training grid, progress
 import_seed.py   idempotent seed import from seed/*.csv
 data/            created at runtime: caltrack.db, photos/, progress/  (gitignored)
 ```
@@ -72,9 +72,10 @@ To keep both alive, either run them in `tmux` or add two tiny systemd units /
 
 **Reminders:** the bot pings you only when something is missing — mornings
 (07:30) when progress photo, weight or waist is >7 days stale, evenings (21:00) if
-nothing is logged or protein is >25 g short. Times and threshold live in
-`config.py`; set to `""` to disable. Requires `TELEGRAM_CHAT_ID` in `.env`
-and only fires while the bot is running.
+nothing is logged or protein is >25 g short. Sundays 19:00 it sends a week in
+review (avg kcal/protein/deficit, days on target, workouts, weight delta).
+Times and threshold live in `config.py`; set to `""` to disable. Requires
+`TELEGRAM_CHAT_ID` in `.env` and only fires while the bot is running.
 
 Deficit = `(maintenance + workout kcal) − eaten`. A day is *on target* when
 eaten ≤ goal **and** protein ≥ floor. Photos are downscaled to ~1080 px and

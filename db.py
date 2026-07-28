@@ -137,6 +137,20 @@ def last_n_days(n: int = 7) -> list[dict]:
     return [day_totals((end - timedelta(days=i)).isoformat()) for i in range(n - 1, -1, -1)]
 
 
+def _trailing_avg(points: list[dict], key: str, window_days: int = 7) -> list[dict]:
+    """Trailing N-day mean over the points that exist — the honest weight signal.
+    Needs at least 3 measurements overall, otherwise it just echoes the raw line."""
+    if len(points) < 3:
+        return []
+    out = []
+    for p in points:
+        end = date.fromisoformat(p["date"])
+        start = end - timedelta(days=window_days - 1)
+        vals = [q[key] for q in points if start <= date.fromisoformat(q["date"]) <= end]
+        out.append({"date": p["date"], key: round(sum(vals) / len(vals), 2)})
+    return out
+
+
 def progress_series() -> dict:
     with connect() as con:
         rows = con.execute(
@@ -144,9 +158,53 @@ def progress_series() -> dict:
             "WHERE weight_kg IS NOT NULL OR waist_cm IS NOT NULL "
             "OR progress_photo_path IS NOT NULL ORDER BY date"
         ).fetchall()
+    weight = [{"date": r["date"], "kg": r["weight_kg"]} for r in rows if r["weight_kg"]]
     return {
-        "weight": [{"date": r["date"], "kg": r["weight_kg"]} for r in rows if r["weight_kg"]],
+        "weight": weight,
+        "weight_avg": _trailing_avg(weight, "kg"),
         "waist": [{"date": r["date"], "cm": r["waist_cm"]} for r in rows if r["waist_cm"]],
         "photos": [{"date": r["date"], "path": r["progress_photo_path"]}
                    for r in rows if r["progress_photo_path"]],
+    }
+
+
+def workouts_last_n(n: int = 30) -> list[dict]:
+    """One entry per day in the window; label is None on rest days."""
+    end = date.fromisoformat(today_str())
+    start = end - timedelta(days=n - 1)
+    with connect() as con:
+        rows = {r["date"]: r for r in con.execute(
+            "SELECT date, workout_label, workout_kcal_burned FROM days "
+            "WHERE date BETWEEN ? AND ? AND workout_label IS NOT NULL",
+            (start.isoformat(), end.isoformat()))}
+    out = []
+    for i in range(n):
+        d = (start + timedelta(days=i)).isoformat()
+        r = rows.get(d)
+        out.append({"date": d,
+                    "label": r["workout_label"] if r else None,
+                    "kcal": (r["workout_kcal_burned"] or 0) if r else 0})
+    return out
+
+
+def week_summary(n: int = 7) -> dict:
+    """Aggregates for the weekly report — averages ignore days with no food logged."""
+    days = last_n_days(n)
+    logged = [d for d in days if d["items"] > 0]
+    workouts = [d for d in days if d["workout_label"]]
+    weights = [d["weight_kg"] for d in days if d["weight_kg"]]
+    waists = [d["waist_cm"] for d in days if d["waist_cm"]]
+    avg = lambda xs: round(sum(xs) / len(xs)) if xs else 0
+    return {
+        "days": n,
+        "logged_days": len(logged),
+        "avg_kcal": avg([d["kcal_eaten"] for d in logged]),
+        "avg_protein": avg([d["protein_g"] for d in logged]),
+        "avg_deficit": avg([d["deficit"] for d in logged]),
+        "on_target_days": sum(1 for d in logged if d["on_target"]),
+        "workouts": len(workouts),
+        "workout_kcal": sum(d["workout_kcal_burned"] for d in workouts),
+        "weight_first": weights[0] if weights else None,
+        "weight_last": weights[-1] if weights else None,
+        "waist_last": waists[-1] if waists else None,
     }

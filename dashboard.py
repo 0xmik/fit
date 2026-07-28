@@ -25,7 +25,10 @@ def index():
 
 @app.get("/api/config")
 def api_config():
+    with db.connect() as con:
+        first = con.execute("SELECT MIN(date) AS d FROM days").fetchone()["d"]
     return {
+        "tracking_since": first,
         "goal_kcal": config.GOAL_KCAL,
         "maintenance_kcal": config.MAINTENANCE_KCAL,
         "deficit_target": config.DEFICIT_TARGET,
@@ -62,6 +65,11 @@ def api_day(day: str):
         "photo_path": r["photo_path"],
     } for r in items]
     return totals
+
+
+@app.get("/api/workouts")
+def api_workouts(days: int = 30):
+    return db.workouts_last_n(max(7, min(days, 120)))
 
 
 @app.get("/api/progress")

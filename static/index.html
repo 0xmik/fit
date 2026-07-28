@@ -102,6 +102,29 @@ header .sync{color:var(--muted)}
 .delta b{color:var(--cyan);font-weight:500}
 .empty{color:var(--muted);font-size:12px;padding:12px 0}
 
+/* training card */
+.train-stats{display:flex;gap:28px;flex-wrap:wrap;margin-bottom:16px}
+.train-stats .st{min-width:70px}
+.train-stats .v{font-size:26px;font-weight:300;line-height:1.1}
+.train-stats .v.dim{color:var(--muted)}
+.train-stats .k{font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted);margin-top:2px}
+.train-grid{display:flex;gap:3px;flex-wrap:wrap}
+.train-grid i{width:15px;height:15px;border-radius:3px;background:#101823;
+  border:1px solid #16202D;display:block;cursor:default}
+.train-grid i.lvl1{background:rgba(53,192,232,.25);border-color:rgba(53,192,232,.3)}
+.train-grid i.lvl2{background:rgba(53,192,232,.55);border-color:rgba(53,192,232,.6)}
+.train-grid i.lvl3{background:var(--cyan);border-color:var(--cyan)}
+.train-grid i.today{outline:1px solid var(--amber);outline-offset:1px}
+.train-legend{display:flex;align-items:center;gap:4px;margin-top:12px;
+  font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.train-legend i{width:11px;height:11px;border-radius:2px;display:block;
+  background:#101823;border:1px solid #16202D}
+.train-legend i.lvl1{background:rgba(53,192,232,.25)}
+.train-legend i.lvl2{background:rgba(53,192,232,.55)}
+.train-legend i.lvl3{background:var(--cyan)}
+.train-legend-note{margin-left:auto;text-transform:none;letter-spacing:.04em}
+
 /* lightbox */
 #lightbox{position:fixed;inset:0;background:rgba(4,7,11,.92);display:none;
   align-items:center;justify-content:center;z-index:50;cursor:zoom-out}
@@ -149,7 +172,20 @@ footer{text-align:center;font-size:10px;color:var(--muted);letter-spacing:.2em;
     <div class="thumbs" id="foodThumbs"></div>
   </div>
 
-  <!-- C · progress -->
+  <!-- C · training -->
+  <div class="card">
+    <div class="card-head"><div class="sec">training</div><div class="meta" id="trainMeta">30 D</div></div>
+    <div class="train-stats" id="trainStats"></div>
+    <div class="train-grid" id="trainGrid"></div>
+    <div class="train-legend">
+      <span>less</span>
+      <i class="lvl0"></i><i class="lvl1"></i><i class="lvl2"></i><i class="lvl3"></i>
+      <span>more</span>
+      <span class="train-legend-note" id="trainLast"></span>
+    </div>
+  </div>
+
+  <!-- D · progress -->
   <div class="card">
     <div class="card-head"><div class="sec">progress · cut</div><div class="meta" id="progMeta"></div></div>
     <div class="chartbox" style="height:230px"><canvas id="weightChart"></canvas></div>
@@ -339,6 +375,43 @@ async function selectDay(day){
   }
 }
 
+/* --- training --- */
+function buildTraining(days){
+  const lvl = k => k === 0 ? 0 : k < 250 ? 1 : k <= 450 ? 2 : 3;
+  const grid = document.getElementById('trainGrid');
+  grid.innerHTML = '';
+  for(const d of days){
+    const cell = document.createElement('i');
+    cell.className = 'lvl' + lvl(d.kcal) + (d.date === CFG.today ? ' today' : '');
+    cell.title = d.label
+      ? `${dLabel(d.date)} · ${d.label}${d.kcal ? ' · ' + d.kcal + ' kcal' : ''}`
+      : `${dLabel(d.date)} · rest`;
+    grid.appendChild(cell);
+  }
+  const done = days.filter(d => d.label);
+  const last7 = days.slice(-7).filter(d => d.label);
+  const kcal30 = done.reduce((s, d) => s + d.kcal, 0);
+  // rate over days actually tracked, not the full window — otherwise the
+  // pre-tracking past drags the average down
+  const spanStart = CFG.tracking_since && CFG.tracking_since > days[0].date
+    ? CFG.tracking_since : days[0].date;
+  const spanDays = Math.max(1, Math.round(
+    (new Date(CFG.today) - new Date(spanStart)) / 86400000) + 1);
+  const perWeek = (done.length / spanDays * 7).toFixed(1);
+  const stats = [
+    [last7.length, 'this week'],
+    [done.length, 'sessions 30d'],
+    [perWeek, 'per week'],
+    [fmt(kcal30), 'kcal burned'],
+  ];
+  document.getElementById('trainStats').innerHTML = stats.map(([v, k]) =>
+    `<div class="st"><div class="v${v === 0 ? ' dim' : ''}">${v}</div><div class="k">${k}</div></div>`
+  ).join('');
+  const last = done[done.length - 1];
+  document.getElementById('trainLast').textContent =
+    last ? `last: ${last.label} · ${dLabel(last.date)}` : 'nothing logged yet — /workout';
+}
+
 /* --- progress --- */
 function buildProgress(p){
   const w = p.weight;
@@ -361,11 +434,21 @@ function buildProgress(p){
       dataW.push(null);
     }
   }
+  const hasAvg = p.weight_avg && p.weight_avg.length >= 3;
   const datasets = [{
-    label:'weight kg', data:dataW, borderColor:C('--cyan'),
-    pointBackgroundColor:C('--cyan'), pointStyle:'rectRot', pointRadius:5,
-    borderWidth:1.5, tension:0.25,
+    label:'weight kg',
+    data:dataW,
+    // raw daily numbers bounce with water/salt — mute them once the trend exists
+    borderColor: hasAvg ? 'rgba(53,192,232,0.28)' : C('--cyan'),
+    pointBackgroundColor: hasAvg ? 'rgba(53,192,232,0.4)' : C('--cyan'),
+    pointStyle:'rectRot', pointRadius: hasAvg ? 3 : 5,
+    borderWidth: hasAvg ? 1 : 1.5, tension:0.25,
   }];
+  if(hasAvg) datasets.push({
+    label:'7-day avg',
+    data: p.weight_avg.map(x => x.kg).concat(projData ? [null] : []),
+    borderColor:C('--cyan'), borderWidth:2, pointRadius:0, tension:0.3,
+  });
   if(projData) datasets.push({
     label:'projection', data:projData, borderColor:'rgba(53,192,232,0.45)',
     borderDash:[6,5], borderWidth:1.2, pointStyle:'rectRot', pointRadius:4,
@@ -382,7 +465,8 @@ function buildProgress(p){
     type:'line', data:{labels, datasets},
     options:{
       maintainAspectRatio:false,
-      plugins:{legend:{display:p.waist.length > 0, labels:{boxWidth:8, boxHeight:8}}},
+      plugins:{legend:{display:p.waist.length > 0 || hasAvg,
+                       labels:{boxWidth:8, boxHeight:8, filter:i => i.text !== 'projection'}}},
       scales:{
         x:AXIS,
         y:{...AXIS, ticks:{maxTicksLimit:5},
@@ -431,6 +515,7 @@ async function init(){
   WEEK = await j('/api/week');
   buildWeekCharts();
   await selectDay(CFG.today);
+  buildTraining(await j('/api/workouts'));
   buildProgress(await j('/api/progress'));
   document.getElementById('prevDay').onclick = () => selectDay(shiftDay(selectedDay, -1));
   document.getElementById('nextDay').onclick = () => selectDay(shiftDay(selectedDay, 1));
