@@ -159,7 +159,16 @@ footer{text-align:center;font-size:10px;color:var(--muted);letter-spacing:.2em;
     </div>
   </div>
 
-  <!-- B · day card -->
+  <!-- B · weight — the headline metric, so it sits high -->
+  <div class="card">
+    <div class="card-head">
+      <div class="sec">weight · cut</div>
+      <div class="meta"><span id="weightNow"></span><span id="progMeta"></span></div>
+    </div>
+    <div class="chartbox" style="height:230px"><canvas id="weightChart"></canvas></div>
+  </div>
+
+  <!-- C · day card -->
   <div class="card" id="dayCard">
     <div class="card-head">
       <div class="sec">day log</div>
@@ -178,7 +187,7 @@ footer{text-align:center;font-size:10px;color:var(--muted);letter-spacing:.2em;
     <div class="thumbs" id="foodThumbs"></div>
   </div>
 
-  <!-- C · training -->
+  <!-- D · training -->
   <div class="card">
     <div class="card-head"><div class="sec">training</div><div class="meta" id="trainMeta">30 D</div></div>
     <div class="train-stats" id="trainStats"></div>
@@ -191,11 +200,9 @@ footer{text-align:center;font-size:10px;color:var(--muted);letter-spacing:.2em;
     </div>
   </div>
 
-  <!-- D · progress -->
+  <!-- E · progress photos -->
   <div class="card">
-    <div class="card-head"><div class="sec">progress · cut</div><div class="meta" id="progMeta"></div></div>
-    <div class="chartbox" style="height:230px"><canvas id="weightChart"></canvas></div>
-    <div class="meal-title" style="margin-top:22px">photo timeline</div>
+    <div class="card-head"><div class="sec">progress photos</div><div class="meta" id="photoMeta"></div></div>
     <div class="timeline" id="photoTimeline"></div>
     <div id="compareWrap"></div>
     <p class="disclaimer">macro numbers are estimates — trend & awareness, not lab precision · photos are for visual comparison only</p>
@@ -447,8 +454,21 @@ function buildTraining(days){
 /* --- progress --- */
 function buildProgress(p){
   const w = p.weight;
-  document.getElementById('progMeta').textContent =
-    p.days_elapsed != null ? `day ${p.days_elapsed}` : 'day 0';
+  // headline: latest weight and how far it has moved from the baseline
+  if(w.length){
+    const now = w[w.length - 1].kg, start = w[0].kg;
+    const d = Math.round((now - start) * 10) / 10;
+    const arrow = d < 0 ? '↓' : d > 0 ? '↑' : '→';
+    document.getElementById('weightNow').textContent =
+      w.length > 1 ? `${now} kg  ${arrow} ${Math.abs(d)} kg` : `${now} kg`;
+  }
+  // day counter runs from the first tracked day, not from the first photo
+  const dayNo = CFG.tracking_since
+    ? Math.round((new Date(CFG.today) - new Date(CFG.tracking_since)) / 86400000)
+    : null;
+  document.getElementById('progMeta').textContent = dayNo != null ? `  ·  day ${dayNo}` : '';
+  document.getElementById('photoMeta').textContent =
+    p.photos.length ? `${p.photos.length} shot${p.photos.length > 1 ? 's' : ''}` : '';
 
   // labels: actual dates + one projected milestone toward goal weight
   const labels = w.map(x => dLabel(x.date));
@@ -486,11 +506,15 @@ function buildProgress(p){
     borderDash:[6,5], borderWidth:1.2, pointStyle:'rectRot', pointRadius:4,
     pointBackgroundColor:C('--amber'), pointBorderColor:C('--amber'),
   });
-  if(p.waist.length) datasets.push({
-    label:'waist cm', data:p.waist.map(x => ({x:dLabel(x.date), y:x.cm})),
-    borderColor:C('--amber'), pointBackgroundColor:C('--amber'),
-    borderWidth:1.2, pointRadius:3, yAxisID:'y1', tension:0.25,
-  });
+  if(p.waist.length){
+    // align to the shared label axis — {x,y} objects land on the wrong index here
+    const byDate = Object.fromEntries(p.waist.map(x => [dLabel(x.date), x.cm]));
+    datasets.push({
+      label:'waist cm', data: labels.map(l => l in byDate ? byDate[l] : null),
+      borderColor:C('--amber'), pointBackgroundColor:C('--amber'),
+      borderWidth:1.2, pointRadius:3, yAxisID:'y1', tension:0.25, spanGaps:true,
+    });
+  }
 
   weightChart?.destroy();
   weightChart = new Chart(document.getElementById('weightChart'), {
@@ -503,8 +527,13 @@ function buildProgress(p){
         x:AXIS,
         y:{...AXIS, ticks:{maxTicksLimit:5},
            suggestedMin: CFG.goal_weight_kg - 1},
-        ...(p.waist.length ? {y1:{position:'right', grid:{display:false},
-           border:{color:C('--border')}, ticks:{maxTicksLimit:5}}} : {})
+        // keep a sane window so a 1 cm change doesn't render as a cliff
+        ...(p.waist.length ? (() => {
+          const v = p.waist.map(x => x.cm), mid = (Math.min(...v) + Math.max(...v)) / 2;
+          const half = Math.max(4, (Math.max(...v) - Math.min(...v)) / 2 + 1);
+          return {y1:{position:'right', grid:{display:false}, border:{color:C('--border')},
+                      ticks:{maxTicksLimit:5}, suggestedMin:mid - half, suggestedMax:mid + half}};
+        })() : {})
       }
     },
     plugins:[bandPlugin(null, CFG.goal_weight_kg, C('--teal'))]
