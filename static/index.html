@@ -23,8 +23,8 @@ body{
   min-height:100vh; padding:24px 16px 60px;
 }
 .wrap{max-width:980px;margin:0 auto}
-header{display:flex;justify-content:space-between;align-items:baseline;
-  text-transform:uppercase;letter-spacing:.14em;font-size:12px;margin-bottom:22px}
+header{display:flex;justify-content:space-between;align-items:baseline;gap:10px 20px;
+  flex-wrap:wrap;text-transform:uppercase;letter-spacing:.14em;font-size:12px;margin-bottom:22px}
 header .who{color:var(--text);font-weight:500}
 header .sync{color:var(--muted)}
 .card{
@@ -37,6 +37,8 @@ header .sync{color:var(--muted)}
 .sec::before{content:"• ";color:var(--teal)}
 .meta{font-size:11px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+/* cards in a row stretch to equal height — let their content fill it */
+.grid2 > .card{display:flex;flex-direction:column}
 @media(max-width:760px){.grid2{grid-template-columns:1fr}}
 .chartbox{position:relative;height:190px}
 
@@ -90,6 +92,11 @@ header .sync{color:var(--muted)}
 .item .pbar i{display:block;height:100%;background:var(--teal)}
 .item .macros{text-align:right;color:var(--muted);white-space:nowrap}
 .item .macros b{color:var(--text);font-weight:500}
+/* on narrow screens the %-of-day bar is the first thing worth dropping */
+@media(max-width:560px){
+  .item{grid-template-columns:1fr auto}
+  .item .pbar{display:none}
+}
 .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .thumbs img{width:72px;height:72px;object-fit:cover;border-radius:6px;
   border:1px solid var(--border);cursor:pointer}
@@ -115,15 +122,16 @@ header .sync{color:var(--muted)}
 .train-stats .v.dim{color:var(--muted)}
 .train-stats .k{font-size:10px;letter-spacing:.14em;text-transform:uppercase;
   color:var(--muted);margin-top:2px}
-.train-grid{display:flex;gap:3px;flex-wrap:wrap}
-.train-grid i{width:15px;height:15px;border-radius:3px;background:#101823;
+/* fixed 15 columns → always a tidy 2x15 block, never an orphan row */
+.train-grid{display:grid;grid-template-columns:repeat(15,1fr);gap:3px;max-width:340px}
+.train-grid i{width:100%;aspect-ratio:1;border-radius:3px;background:#101823;
   border:1px solid #16202D;display:block;cursor:default}
 .train-grid i.lvl1{background:rgba(53,192,232,.25);border-color:rgba(53,192,232,.3)}
 .train-grid i.lvl2{background:rgba(53,192,232,.55);border-color:rgba(53,192,232,.6)}
 .train-grid i.lvl3{background:var(--cyan);border-color:var(--cyan)}
 .train-grid i.today{outline:1px solid var(--amber);outline-offset:1px}
-.train-legend{display:flex;align-items:center;gap:4px;margin-top:12px;
-  font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.train-legend{display:flex;align-items:center;gap:4px;margin-top:auto;padding-top:14px;
+  font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);flex-wrap:wrap}
 .train-legend i{width:11px;height:11px;border-radius:2px;display:block;
   background:#101823;border:1px solid #16202D}
 .train-legend i.lvl1{background:rgba(53,192,232,.25)}
@@ -159,13 +167,26 @@ footer{text-align:center;font-size:10px;color:var(--muted);letter-spacing:.2em;
     </div>
   </div>
 
-  <!-- B · weight — the headline metric, so it sits high -->
-  <div class="card">
-    <div class="card-head">
-      <div class="sec">weight · cut</div>
-      <div class="meta"><span id="weightNow"></span><span id="progMeta"></span></div>
+  <!-- B · weight + training — second half of the at-a-glance 2x2 -->
+  <div class="grid2">
+    <div class="card">
+      <div class="card-head">
+        <div class="sec">weight · cut</div>
+        <div class="meta"><span id="weightNow"></span><span id="progMeta"></span></div>
+      </div>
+      <div class="chartbox"><canvas id="weightChart"></canvas></div>
     </div>
-    <div class="chartbox" style="height:230px"><canvas id="weightChart"></canvas></div>
+    <div class="card">
+      <div class="card-head"><div class="sec">training</div><div class="meta" id="trainMeta">30 D</div></div>
+      <div class="train-stats" id="trainStats"></div>
+      <div class="train-grid" id="trainGrid"></div>
+      <div class="train-legend">
+        <span>less</span>
+        <i class="lvl0"></i><i class="lvl1"></i><i class="lvl2"></i><i class="lvl3"></i>
+        <span>more</span>
+        <span class="train-legend-note" id="trainLast"></span>
+      </div>
+    </div>
   </div>
 
   <!-- C · day card -->
@@ -187,20 +208,7 @@ footer{text-align:center;font-size:10px;color:var(--muted);letter-spacing:.2em;
     <div class="thumbs" id="foodThumbs"></div>
   </div>
 
-  <!-- D · training -->
-  <div class="card">
-    <div class="card-head"><div class="sec">training</div><div class="meta" id="trainMeta">30 D</div></div>
-    <div class="train-stats" id="trainStats"></div>
-    <div class="train-grid" id="trainGrid"></div>
-    <div class="train-legend">
-      <span>less</span>
-      <i class="lvl0"></i><i class="lvl1"></i><i class="lvl2"></i><i class="lvl3"></i>
-      <span>more</span>
-      <span class="train-legend-note" id="trainLast"></span>
-    </div>
-  </div>
-
-  <!-- E · progress photos -->
+  <!-- D · progress photos -->
   <div class="card">
     <div class="card-head"><div class="sec">progress photos</div><div class="meta" id="photoMeta"></div></div>
     <div class="timeline" id="photoTimeline"></div>
