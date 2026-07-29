@@ -12,7 +12,7 @@
 :root{
   --bg:#0A0E14; --card:#0F1520; --border:#1E2A38;
   --cyan:#35C0E8; --amber:#E0A23C; --coral:#E4623E; --teal:#2C7A8C;
-  --green:#43C275;
+  --green:#43C275; --green-dim:#37855F;  /* dim = right direction, short of target */
   --text:#E6EDF3; --muted:#6B7A8D;
 }
 *{box-sizing:border-box;margin:0;padding:0}
@@ -45,7 +45,7 @@ header .sync{color:var(--muted)}
   border:1px solid;border-radius:4px;padding:2px 8px;vertical-align:middle}
 .pill.ok{color:var(--cyan);border-color:var(--cyan)}
 .pill.good{color:var(--green);border-color:var(--green)}
-.pill.watch{color:var(--amber);border-color:var(--amber)}
+.pill.dim{color:var(--green-dim);border-color:var(--green-dim)}
 .pill.flag{color:var(--coral);border-color:var(--coral)}
 .pill.neutral{color:var(--muted);border-color:var(--border)}
 
@@ -59,12 +59,12 @@ header .sync{color:var(--muted)}
 .bignum{font-size:44px;font-weight:300;line-height:1.1;margin:8px 0 2px}
 .bignum .unit{font-size:13px;color:var(--muted);font-weight:400;margin-left:6px}
 .bignum.good{color:var(--green)}
-.bignum.watch{color:var(--amber)}
+.bignum.partial{color:var(--green-dim)}
 .bignum.over{color:var(--coral)}
 .subline{font-size:12px;color:var(--muted);margin-bottom:14px}
 .subline .ok{color:var(--green)}
 .subline .t-good{color:var(--green)}
-.subline .t-watch{color:var(--amber)}
+.subline .t-partial{color:var(--green-dim)}
 .subline .t-over{color:var(--coral)}
 
 /* double progress bar */
@@ -72,7 +72,7 @@ header .sync{color:var(--muted)}
   border-radius:7px;margin:10px 0 4px;overflow:visible}
 .track .fill{position:absolute;top:0;left:0;height:100%;border-radius:7px 0 0 7px;
   background:linear-gradient(90deg,#1E7FA0,var(--cyan))}
-.track .fill.watch{background:linear-gradient(90deg,#8A6524,var(--amber))}
+.track .fill.partial{background:linear-gradient(90deg,#215139,var(--green-dim))}
 .track .fill.over{background:linear-gradient(90deg,#A0472C,var(--coral))}
 .track .goalmark{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--amber)}
 .track-labels{display:flex;justify-content:space-between;font-size:10px;color:var(--muted);
@@ -81,14 +81,14 @@ header .sync{color:var(--muted)}
 /* meal groups */
 .meal-title{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);
   margin:16px 0 6px}
-.item{display:grid;grid-template-columns:1fr 90px 110px;gap:10px;align-items:center;
+.item{display:grid;grid-template-columns:1fr 90px 130px;gap:10px;align-items:center;
   padding:6px 0;border-bottom:1px solid #131C29;font-size:12px}
 .item:last-child{border-bottom:none}
 .item .nm{color:var(--text)}
 .item .detail{color:var(--muted);font-size:10px;margin-top:2px}
 .item .pbar{height:3px;background:#131C29;border-radius:2px;overflow:hidden}
 .item .pbar i{display:block;height:100%;background:var(--teal)}
-.item .macros{text-align:right;color:var(--muted)}
+.item .macros{text-align:right;color:var(--muted);white-space:nowrap}
 .item .macros b{color:var(--text);font-weight:500}
 .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .thumbs img{width:72px;height:72px;object-fit:cover;border-radius:6px;
@@ -222,12 +222,13 @@ const fmt = n => Math.round(n).toLocaleString('en-US').replace(/,/g, ' ');
 // kcal:    at/under goal (= deficit target met) · still in deficit · no deficit left
 // protein: floor met · under floor but above the muscle-retention minimum · below it
 function calState(kcal, goal, maint){
-  return kcal <= goal ? 'good' : kcal <= maint ? 'watch' : 'over';
+  return kcal <= goal ? 'good' : kcal <= maint ? 'partial' : 'over';
 }
 function proteinState(g, goal, min){
-  return g >= goal ? 'good' : g >= min ? 'watch' : 'over';
+  return g >= goal ? 'good' : g >= min ? 'partial' : 'over';
 }
-const STATE_COLOR = {good:'--green', watch:'--amber', over:'--coral'};
+// one hue, two intensities, then coral — a shortfall is not a warning
+const STATE_COLOR = {good:'--green', partial:'--green-dim', over:'--coral'};
 // an unlogged day is not an achievement — render it as absent, not green
 const barColor = (state, logged) => logged ? C(STATE_COLOR[state]) : 'rgba(107,122,141,0.25)';
 const dLabel = d => new Date(d + 'T12:00:00').toLocaleDateString('en-GB',
@@ -323,6 +324,9 @@ async function selectDay(day){
   const t = await j('/api/day/' + day);
   document.getElementById('dayNavDate').textContent = dLabel(day);
 
+  const maint = t.maintenance_kcal + t.workout_kcal_burned;
+  const state = calState(t.kcal_eaten, t.goal_kcal, maint);
+
   const head = document.getElementById('dayHead');
   head.innerHTML = '';
   const dd = document.createElement('span');
@@ -337,16 +341,13 @@ async function selectDay(day){
     const w = document.createElement('span'); w.className = 'pill neutral';
     w.textContent = t.weight_kg + ' kg'; head.appendChild(w);
   }
-  const status = t.kcal_eaten > t.maintenance_kcal + t.workout_kcal_burned ? ['flag','FLAG']
-    : t.kcal_eaten > t.goal_kcal ? ['watch','WATCH']
-    : t.on_target ? ['good','✓ ON TARGET'] : ['ok','UNDER GOAL'];
+  const status = state === 'over' ? ['flag', 'NO DEFICIT']
+    : state === 'partial' ? ['dim', 'IN DEFICIT']
+    : t.on_target ? ['good', '✓ ON TARGET'] : ['good', 'UNDER GOAL'];
   if(t.items > 0){
     const s = document.createElement('span'); s.className = 'pill ' + status[0];
     s.textContent = status[1]; head.appendChild(s);
   }
-
-  const maint = t.maintenance_kcal + t.workout_kcal_burned;
-  const state = calState(t.kcal_eaten, t.goal_kcal, maint);
 
   const big = document.getElementById('dayKcal');
   big.className = 'bignum ' + state;
