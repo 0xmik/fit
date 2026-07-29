@@ -23,8 +23,17 @@ Rules:
 - If the input is not food at all, return {"items": []}."""
 
 
+class EstimationError(Exception):
+    """Estimation failed. `temporary` means retrying the same input may work."""
+
+    def __init__(self, message: str, temporary: bool = False):
+        super().__init__(message)
+        self.temporary = temporary
+
+
 def _client() -> anthropic.Anthropic:
-    return anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+    # a few extra retries so brief API overload doesn't surface to the user
+    return anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY, max_retries=4)
 
 
 def _parse(text: str) -> list[dict]:
@@ -51,7 +60,7 @@ def _parse(text: str) -> list[dict]:
 
 def estimate(text: str | None, image_bytes: bytes | None,
              local_time_str: str) -> list[dict]:
-    """Returns a list of food item dicts. Raises ValueError if unparseable."""
+    """Returns a list of food item dicts. Raises EstimationError on failure."""
     content: list[dict] = []
     if image_bytes:
         content.append({
@@ -66,14 +75,22 @@ def estimate(text: str | None, image_bytes: bytes | None,
     prompt += f"Food log entry: {text}" if text else "Estimate the food in this photo (amount eaten)."
     content.append({"type": "text", "text": prompt})
 
-    msg = _client().messages.create(
-        model=config.ANTHROPIC_MODEL,
-        max_tokens=1500,
-        system=SYSTEM,
-        messages=[{"role": "user", "content": content}],
-    )
+    try:
+        msg = _client().messages.create(
+            model=config.ANTHROPIC_MODEL,
+            max_tokens=1500,
+            system=SYSTEM,
+            messages=[{"role": "user", "content": content}],
+        )
+    except (anthropic.APIConnectionError, anthropic.RateLimitError,
+            anthropic.InternalServerError) as e:
+        # overload (529), rate limits and network blips — the input was fine
+        raise EstimationError(f"api unavailable: {e}", temporary=True) from e
+    except anthropic.APIStatusError as e:
+        raise EstimationError(f"api error: {e}") from e
+
     raw = "".join(b.text for b in msg.content if b.type == "text")
     try:
         return _parse(raw)
     except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
-        raise ValueError(f"could not parse model output: {e}") from e
+        raise EstimationError(f"could not parse model output: {e}") from e

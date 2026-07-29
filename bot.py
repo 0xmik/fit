@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from PIL import Image
 from telegram import Update
+from telegram.error import NetworkError, TelegramError
 from telegram.ext import (Application, CommandHandler, ContextTypes,
                           MessageHandler, filters)
 
@@ -239,8 +240,12 @@ async def on_text(update: Update, _: ContextTypes.DEFAULT_TYPE):
     await update.message.chat.send_action("typing")
     try:
         items = estimator.estimate(text, None, when.strftime("%H:%M"))
-    except ValueError:
-        await update.message.reply_text("🤔 couldn't parse that — try rephrasing (e.g. `beef stir-fry 263g cooked`)")
+    except estimator.EstimationError as e:
+        log.warning("text estimation failed: %s", e)
+        await update.message.reply_text(
+            "⏳ estimation service is busy — send it again in a moment, nothing was logged"
+            if e.temporary else
+            "🤔 couldn't parse that — try rephrasing (e.g. `beef stir-fry 263g cooked`)")
         return
     if not items:
         await update.message.reply_text("that didn't look like food — nothing logged")
@@ -265,18 +270,21 @@ async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"📸 progress photo saved for {day}")
         return
 
-    # food photo
+    # food photo — estimate first, only keep the file if something gets logged
     await update.message.chat.send_action("typing")
-    stem = when.strftime("%Y-%m-%d_%H%M%S")
-    rel = save_downscaled(image_bytes, config.PHOTO_DIR, stem)
     try:
         items = estimator.estimate(caption or None, image_bytes, when.strftime("%H:%M"))
-    except ValueError:
-        await update.message.reply_text("🤔 couldn't read that photo — add a caption describing the food and resend")
+    except estimator.EstimationError as e:
+        log.warning("photo estimation failed: %s", e)
+        await update.message.reply_text(
+            "⏳ estimation service is busy — send the photo again in a moment, nothing was logged"
+            if e.temporary else
+            "🤔 couldn't read that photo — add a caption describing the food and resend")
         return
     if not items:
         await update.message.reply_text("no food detected in the photo — nothing logged")
         return
+    rel = save_downscaled(image_bytes, config.PHOTO_DIR, when.strftime("%Y-%m-%d_%H%M%S"))
     await update.message.reply_text(await store_items(items, rel, when))
 
 
@@ -377,6 +385,22 @@ def schedule_reminders(app) -> None:
              config.WEEKLY_REPORT or "off", config.TIMEZONE)
 
 
+async def on_error(update, context):
+    """Keep the log readable: connectivity blips are one line, real bugs get a
+    traceback and — where possible — a reply so a message is never silently lost."""
+    err = context.error
+    if isinstance(err, TelegramError) and isinstance(err, NetworkError):
+        log.warning("network unavailable (%s) — retrying automatically", type(err).__name__)
+        return
+    log.exception("unhandled error while processing update", exc_info=err)
+    if isinstance(update, Update) and update.effective_message:
+        try:
+            await update.effective_message.reply_text(
+                "⚠️ something went wrong on my side — nothing was logged, please send it again")
+        except TelegramError:
+            pass
+
+
 def main():
     if not config.TELEGRAM_BOT_TOKEN:
         raise SystemExit("TELEGRAM_BOT_TOKEN is not set (see .env.example)")
@@ -392,6 +416,7 @@ def main():
     app.add_handler(CommandHandler("undo", cmd_undo))
     app.add_handler(MessageHandler(filters.PHOTO, on_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_text))
+    app.add_error_handler(on_error)
     schedule_reminders(app)
     log.info("health cockpit bot polling…")
     app.run_polling()
