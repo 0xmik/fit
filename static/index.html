@@ -63,6 +63,9 @@ header .sync{color:var(--muted)}
 .bignum.over{color:var(--coral)}
 .subline{font-size:12px;color:var(--muted);margin-bottom:14px}
 .subline .ok{color:var(--green)}
+.subline .t-good{color:var(--green)}
+.subline .t-watch{color:var(--amber)}
+.subline .t-over{color:var(--coral)}
 
 /* double progress bar */
 .track{position:relative;height:14px;background:#0A101A;border:1px solid var(--border);
@@ -215,11 +218,18 @@ let calChart, protChart, weightChart;
 
 const fmt = n => Math.round(n).toLocaleString('en-US').replace(/,/g, ' ');
 
-// three honest states: at goal · over goal but still in deficit · no deficit left
+// One colour language for both cards, each band with a physiological meaning.
+// kcal:    at/under goal (= deficit target met) · still in deficit · no deficit left
+// protein: floor met · under floor but above the muscle-retention minimum · below it
 function calState(kcal, goal, maint){
   return kcal <= goal ? 'good' : kcal <= maint ? 'watch' : 'over';
 }
-const CAL_COLOR = {good:'--green', watch:'--amber', over:'--coral'};
+function proteinState(g, goal, min){
+  return g >= goal ? 'good' : g >= min ? 'watch' : 'over';
+}
+const STATE_COLOR = {good:'--green', watch:'--amber', over:'--coral'};
+// an unlogged day is not an achievement — render it as absent, not green
+const barColor = (state, logged) => logged ? C(STATE_COLOR[state]) : 'rgba(107,122,141,0.25)';
 const dLabel = d => new Date(d + 'T12:00:00').toLocaleDateString('en-GB',
   {day:'2-digit', month:'short'}).toUpperCase().replace('.','');
 
@@ -266,8 +276,8 @@ function buildWeekCharts(){
     type:'bar',
     data:{labels, datasets:[{
       data: WEEK.map(d => d.kcal_eaten),
-      backgroundColor: WEEK.map(d => C(CAL_COLOR[calState(
-        d.kcal_eaten, CFG.goal_kcal, d.maintenance_kcal + d.workout_kcal_burned)])),
+      backgroundColor: WEEK.map(d => barColor(calState(
+        d.kcal_eaten, CFG.goal_kcal, d.maintenance_kcal + d.workout_kcal_burned), d.items > 0)),
       borderRadius:3, maxBarThickness:26,
     }]},
     options:{
@@ -286,9 +296,8 @@ function buildWeekCharts(){
     type:'bar',
     data:{labels, datasets:[{
       data: WEEK.map(d => d.protein_g),
-      // a near miss is not a failure — 90%+ still counts as on track
-      backgroundColor: WEEK.map(d => d.protein_g >= CFG.protein_goal_g ? C('--green')
-        : d.protein_g >= CFG.protein_goal_g * 0.9 ? C('--cyan') : 'rgba(53,192,232,0.3)'),
+      backgroundColor: WEEK.map(d => barColor(proteinState(
+        d.protein_g, CFG.protein_goal_g, CFG.protein_min_g), d.items > 0)),
       borderRadius:3, maxBarThickness:26,
     }]},
     options:{
@@ -351,8 +360,9 @@ async function selectDay(day){
   document.getElementById('trackMaint').textContent = 'maint ' + fmt(maint);
 
   const defOk = t.deficit >= 0;
+  const pState = t.items ? proteinState(t.protein_g, t.protein_goal_g, CFG.protein_min_g) : '';
   document.getElementById('daySub').innerHTML =
-    `${t.items} items · ${t.protein_g} g protein / ${t.protein_goal_g} g · ` +
+    `${t.items} items · <span class="t-${pState}">${t.protein_g} g protein / ${t.protein_goal_g} g</span> · ` +
     `<span class="${defOk ? 'ok' : ''}">deficit ${fmt(t.deficit)} kcal ${defOk ? '✓' : ''}</span>`;
 
   const groups = document.getElementById('mealGroups');

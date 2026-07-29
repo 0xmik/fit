@@ -9,6 +9,7 @@ MAINTENANCE_KCAL = 2400   # Mifflin-St Jeor @38y/174cm/87.2kg (BMR ~1775) + offi
                           # Recalibrate after 3-4 weeks of real trend data.
 DEFICIT_TARGET = 500      # kcal/day under maintenance ≈ 0.5 kg/week
 PROTEIN_GOAL_G = 170      # protein floor, ~2 g/kg while cutting to preserve muscle
+PROTEIN_MIN_G = 140       # ~1.6 g/kg — below this, muscle loss risk rises materially
 BODYWEIGHT_KG = 87.2      # baseline 2026-07-26, editable
 GOAL_WEIGHT_KG = 80.0     # checkpoint, not final — reassess visually around here
 TIMEZONE = "Europe/Zurich"

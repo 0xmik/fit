@@ -33,6 +33,7 @@ def api_config():
         "maintenance_kcal": config.MAINTENANCE_KCAL,
         "deficit_target": config.DEFICIT_TARGET,
         "protein_goal_g": config.PROTEIN_GOAL_G,
+        "protein_min_g": config.PROTEIN_MIN_G,
         "bodyweight_kg": config.BODYWEIGHT_KG,
         "goal_weight_kg": config.GOAL_WEIGHT_KG,
         "today": db.today_str(),
