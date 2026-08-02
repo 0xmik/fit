@@ -424,12 +424,14 @@ function buildTraining(days){
     document.getElementById('trainLast').textContent = 'no workout data';
     return;
   }
-  const lvl = k => k === 0 ? 0 : k < 250 ? 1 : k <= 450 ? 2 : 3;
+  // a logged session always lights up, even without a kcal estimate — kcal only
+  // picks the shade. Keying the level off kcal alone hid whole workouts.
+  const lvl = d => !d.label ? 0 : d.kcal < 250 ? 1 : d.kcal <= 450 ? 2 : 3;
   const grid = document.getElementById('trainGrid');
   grid.innerHTML = '';
   for(const d of days){
     const cell = document.createElement('i');
-    cell.className = 'lvl' + lvl(d.kcal) + (d.date === CFG.today ? ' today' : '');
+    cell.className = 'lvl' + lvl(d) + (d.date === CFG.today ? ' today' : '');
     cell.title = d.label
       ? `${dLabel(d.date)} · ${d.label}${d.kcal ? ' · ' + d.kcal + ' kcal' : ''}`
       : `${dLabel(d.date)} · rest`;
