@@ -36,6 +36,12 @@ header .sync{color:var(--muted)}
 .sec{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
 .sec::before{content:"• ";color:var(--teal)}
 .meta{font-size:11px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase}
+.rangesel{display:flex;gap:4px}
+.rangesel button{font:inherit;font-size:11px;letter-spacing:.1em;color:var(--muted);
+  background:none;border:1px solid var(--border);border-radius:3px;padding:1px 7px;
+  cursor:pointer;text-transform:uppercase}
+.rangesel button:hover{color:var(--text)}
+.rangesel button.on{color:var(--cyan);border-color:var(--cyan)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
 /* cards in a row stretch to equal height — let their content fill it */
 .grid2 > .card{display:flex;flex-direction:column}
@@ -158,11 +164,15 @@ footer{text-align:center;font-size:10px;color:var(--muted);letter-spacing:.2em;
   <!-- A · weekly overview -->
   <div class="grid2">
     <div class="card">
-      <div class="card-head"><div class="sec">daily intake</div><div class="meta">7 d</div></div>
+      <div class="card-head"><div class="sec">daily intake</div>
+        <div class="rangesel" id="rangeSel">
+          <button data-days="7">7 d</button><button data-days="14">14 d</button><button data-days="30">30 d</button>
+        </div>
+      </div>
       <div class="chartbox"><canvas id="calChart"></canvas></div>
     </div>
     <div class="card">
-      <div class="card-head"><div class="sec">protein</div><div class="meta">7 d</div></div>
+      <div class="card-head"><div class="sec">protein</div><div class="meta" id="protRange">7 d</div></div>
       <div class="chartbox"><canvas id="protChart"></canvas></div>
     </div>
   </div>
@@ -229,6 +239,8 @@ Chart.defaults.font.size = 10;
 Chart.defaults.color = C('--muted');
 
 let CFG = null, WEEK = [], selectedDay = null;
+// how many days the intake/protein bars cover — remembered between visits
+let RANGE = Number(localStorage.getItem('range')) || 7;
 let calChart, protChart, weightChart;
 
 const fmt = n => Math.round(n).toLocaleString('en-US').replace(/,/g, ' ');
@@ -286,6 +298,8 @@ const AXIS = {grid:{display:false}, border:{color:C('--border')}};
 
 function buildWeekCharts(){
   const labels = WEEK.map(d => dLabel(d.date));
+  // over a long range every date label would collide — let Chart.js thin them out
+  const xAxis = {...AXIS, ticks:{autoSkip:true, maxTicksLimit: WEEK.length > 14 ? 8 : 14}};
 
   calChart?.destroy();
   calChart = new Chart(document.getElementById('calChart'), {
@@ -301,7 +315,7 @@ function buildWeekCharts(){
       onClick:(e, els)=>{ if(els.length){ selectDay(WEEK[els[0].index].date); } },
       plugins:{legend:{display:false}, tooltip:{callbacks:{
         label: ctx => ` ${fmt(ctx.raw)} kcal`}}},
-      scales:{x:AXIS, y:{...AXIS, beginAtZero:true,
+      scales:{x:xAxis, y:{...AXIS, beginAtZero:true,
         suggestedMax: CFG.maintenance_kcal + 200, ticks:{maxTicksLimit:4}}}
     },
     plugins:[bandPlugin(CFG.maintenance_kcal, CFG.goal_kcal, C('--amber'))]
@@ -321,7 +335,7 @@ function buildWeekCharts(){
       onClick:(e, els)=>{ if(els.length){ selectDay(WEEK[els[0].index].date); } },
       plugins:{legend:{display:false}, tooltip:{callbacks:{
         label: ctx => ` ${ctx.raw} g protein`}}},
-      scales:{x:AXIS, y:{...AXIS, beginAtZero:true,
+      scales:{x:xAxis, y:{...AXIS, beginAtZero:true,
         suggestedMax: CFG.protein_goal_g + 40, ticks:{maxTicksLimit:4}}}
     },
     plugins:[bandPlugin(null, CFG.protein_goal_g, C('--amber'))]
@@ -579,6 +593,26 @@ function lightbox(src){
   document.getElementById('lightbox').style.display = 'flex';
 }
 
+/* --- range switch for the intake + protein bars --- */
+async function loadWeek(){
+  WEEK = await j(`/api/week?days=${RANGE}`);
+  buildWeekCharts();
+  document.getElementById('protRange').textContent = `${RANGE} d`;
+  for(const b of document.querySelectorAll('#rangeSel button')){
+    b.classList.toggle('on', Number(b.dataset.days) === RANGE);
+  }
+}
+
+function wireRangeSwitch(){
+  document.getElementById('rangeSel').onclick = async e => {
+    const btn = e.target.closest('button');
+    if(!btn) return;
+    RANGE = Number(btn.dataset.days);
+    localStorage.setItem('range', RANGE);
+    await section('week', loadWeek);
+  };
+}
+
 /* --- init --- */
 // one failing section must never blank the rest of the page
 async function section(name, fn, onFail){
@@ -589,11 +623,12 @@ async function section(name, fn, onFail){
 async function init(){
   CFG = await j('/api/config');
   document.getElementById('sync-date').textContent = dLabel(CFG.today);
-  await section('week', async () => { WEEK = await j('/api/week'); buildWeekCharts(); });
+  await section('week', loadWeek);
   await section('day', () => selectDay(CFG.today));
   await section('training', async () => buildTraining(await j('/api/workouts')),
     () => document.getElementById('trainLast').textContent = 'training data unavailable — restart the dashboard');
   await section('progress', async () => buildProgress(await j('/api/progress')));
+  wireRangeSwitch();
   document.getElementById('prevDay').onclick = () => selectDay(shiftDay(selectedDay, -1));
   document.getElementById('nextDay').onclick = () => selectDay(shiftDay(selectedDay, 1));
 }
