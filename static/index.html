@@ -294,12 +294,39 @@ function bandPlugin(bandVal, lineVal, lineColor){
   };
 }
 
+/* --- mean over the range, drawn on top of the bars with its value --- */
+function avgPlugin(value, label){
+  return {
+    id:'avg',
+    afterDatasetsDraw(chart){
+      if(value == null) return;
+      const {ctx, chartArea:a, scales:{y}} = chart;
+      const ya = y.getPixelForValue(value);
+      ctx.save();
+      ctx.strokeStyle = C('--text'); ctx.globalAlpha = .5; ctx.lineWidth = 1;
+      ctx.setLineDash([3,3]);
+      ctx.beginPath(); ctx.moveTo(a.left, ya); ctx.lineTo(a.right, ya); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = .75;
+      ctx.fillStyle = C('--text'); ctx.font = `10px ${MONO}`;
+      ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+      ctx.fillText(label, a.right, ya - 3);
+      ctx.restore();
+    }
+  };
+}
+
 const AXIS = {grid:{display:false}, border:{color:C('--border')}};
 
 function buildWeekCharts(){
   const labels = WEEK.map(d => dLabel(d.date));
   // over a long range every date label would collide — let Chart.js thin them out
   const xAxis = {...AXIS, ticks:{autoSkip:true, maxTicksLimit: WEEK.length > 14 ? 8 : 14}};
+  // days without a single item are gaps in the log, not zero-calorie days —
+  // averaging them in would drag both means down and read as progress
+  const logged = WEEK.filter(d => d.items > 0);
+  const mean = key => logged.length
+    ? logged.reduce((s, d) => s + d[key], 0) / logged.length : null;
+  const avgKcal = mean('kcal_eaten'), avgProt = mean('protein_g');
 
   calChart?.destroy();
   calChart = new Chart(document.getElementById('calChart'), {
@@ -318,7 +345,8 @@ function buildWeekCharts(){
       scales:{x:xAxis, y:{...AXIS, beginAtZero:true,
         suggestedMax: CFG.maintenance_kcal + 200, ticks:{maxTicksLimit:4}}}
     },
-    plugins:[bandPlugin(CFG.maintenance_kcal, CFG.goal_kcal, C('--amber'))]
+    plugins:[bandPlugin(CFG.maintenance_kcal, CFG.goal_kcal, C('--amber')),
+             avgPlugin(avgKcal, avgKcal == null ? '' : `Ø ${fmt(avgKcal)} kcal`)]
   });
 
   protChart?.destroy();
@@ -338,7 +366,8 @@ function buildWeekCharts(){
       scales:{x:xAxis, y:{...AXIS, beginAtZero:true,
         suggestedMax: CFG.protein_goal_g + 40, ticks:{maxTicksLimit:4}}}
     },
-    plugins:[bandPlugin(null, CFG.protein_goal_g, C('--amber'))]
+    plugins:[bandPlugin(null, CFG.protein_goal_g, C('--amber')),
+             avgPlugin(avgProt, avgProt == null ? '' : `Ø ${Math.round(avgProt)} g`)]
   });
 }
 
