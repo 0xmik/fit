@@ -306,10 +306,16 @@ function avgPlugin(value, label){
       ctx.strokeStyle = C('--text'); ctx.globalAlpha = .5; ctx.lineWidth = 1;
       ctx.setLineDash([3,3]);
       ctx.beginPath(); ctx.moveTo(a.left, ya); ctx.lineTo(a.right, ya); ctx.stroke();
-      ctx.setLineDash([]); ctx.globalAlpha = .75;
-      ctx.fillStyle = C('--text'); ctx.font = `10px ${MONO}`;
+      ctx.setLineDash([]);
+      // the goal line can sit within a few pixels of the mean — clear a patch of
+      // card behind the value so the two never overprint each other
+      ctx.font = `10px ${MONO}`;
       ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-      ctx.fillText(label, a.right, ya - 3);
+      const w = ctx.measureText(label).width;
+      ctx.globalAlpha = 1; ctx.fillStyle = C('--card');
+      ctx.fillRect(a.right - w - 6, ya - 15, w + 6, 13);
+      ctx.globalAlpha = .75; ctx.fillStyle = C('--text');
+      ctx.fillText(label, a.right - 3, ya - 3);
       ctx.restore();
     }
   };
